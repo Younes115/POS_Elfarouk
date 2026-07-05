@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -34,11 +35,16 @@
     "tailwindcss": "^4.3.2",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
+    "vitest": "^4.1.9",
     "wait-on": "^9.0.10"
   },
   "oxlint": {
     "$schema": "./node_modules/oxlint/configuration_schema.json",
-    "plugins": ["react", "typescript", "oxc"],
+    "plugins": [
+      "react",
+      "typescript",
+      "oxc"
+    ],
     "options": {
       "typeAware": true
     },

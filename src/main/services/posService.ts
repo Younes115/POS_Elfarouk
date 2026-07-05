@@ -95,6 +95,11 @@ export function createPosService(prisma: PrismaClient) {
     orderData: CreateOrderInput,
     items: CreateOrderItemInput[],
   ): Promise<OrderRecord> {
+    // Edge Case: Enforce total >= 0 for SALES
+    const calculatedTotal = orderData.type === 'RETURN' 
+      ? orderData.total 
+      : Math.max(0, orderData.subTotal - (orderData.discountValue ?? 0));
+
     return prisma.$transaction(async (tx) => {
       // 1. Create the Order header.
       const order = await tx.order.create({
@@ -103,7 +108,7 @@ export function createPosService(prisma: PrismaClient) {
           subTotal: orderData.subTotal,
           discountValue: orderData.discountValue ?? 0,
           offerName: orderData.offerName ?? null,
-          total: orderData.total,
+          total: calculatedTotal,
           type: orderData.type ?? 'SALE',
         },
       });

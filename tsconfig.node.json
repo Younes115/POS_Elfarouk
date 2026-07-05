@@ -18,10 +18,11 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@main/*": ["./src/main/*"]
     }
   },
-  "include": ["vite.config.ts", "src/main"]
+  "include": ["vite.config.ts", "src/main", "tests"]
 }
