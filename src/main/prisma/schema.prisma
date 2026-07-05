@@ -7,12 +7,77 @@ datasource db {
   url      = "file:./dev.db"
 }
 
-// Example initial model for the POS system
+// ─────────────────────────────────────────────
+// PRODUCT (Inventory)
+// Represents a physical item stocked in the store.
+// Price and cost fields are the *current* store values.
+// Historical values at point-of-sale are frozen on OrderItem.
+// ─────────────────────────────────────────────
 model Product {
-  id          Int      @id @default(autoincrement())
-  name        String
-  price       Float
-  sku         String   @unique
+  id           String      @id @default(uuid())
+  sku          String      @unique
+  name         String
+  costPrice    Float
+  sellingPrice Float
+  stock        Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  orderItems   OrderItem[]
+}
+
+// ─────────────────────────────────────────────
+// ORDER (Sales & Returns)
+// A completed transaction. type = "SALE" | "RETURN".
+// Returns are full reversals: same model, negative quantities on OrderItem.
+// See ADR: docs/adr/0001-returns-as-inverted-orders.md
+// ─────────────────────────────────────────────
+model Order {
+  id            String      @id @default(uuid())
+  receiptNumber String      @unique
+  subTotal      Float
+  // discountValue: fixed monetary amount, never a percentage.
+  // The human-readable reason is stored in offerName.
+  discountValue Float       @default(0)
+  offerName     String?
+  total         Float
+  // "SALE" (default) or "RETURN". Queries for sales-only
+  // must filter WHERE type = 'SALE'. See CONTEXT.md.
+  type          String      @default("SALE")
+  createdAt     DateTime    @default(now())
+
+  items         OrderItem[]
+}
+
+// ─────────────────────────────────────────────
+// ORDER ITEM (Line Items)
+// One product line within an Order.
+// priceAtSale and costAtSale are frozen snapshots — they
+// must never be recalculated from the current Product fields.
+// Negative quantity = returned units (see ADR 0001).
+// productId is nullable with SetNull so deleting a Product
+// does not destroy historical order data.
+// ─────────────────────────────────────────────
+model OrderItem {
+  id          String   @id @default(uuid())
+  orderId     String
+  productId   String?
+  quantity    Int
+  costAtSale  Float
+  priceAtSale Float
+
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+}
+
+// ─────────────────────────────────────────────
+// EXPENSE (Daily Operational Costs)
+// Tracks non-inventory costs (rent, utilities, wages)
+// for daily profitability reports.
+// ─────────────────────────────────────────────
+model Expense {
+  id          String   @id @default(uuid())
+  description String
+  amount      Float
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 }
