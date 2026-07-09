@@ -3,7 +3,7 @@ import { Layout } from './components/Layout';
 import Cashier from './pages/Cashier';
 import Inventory from './pages/Inventory';
 import Expenses from './pages/Expenses';
-import './App.css';
+
 
 function App() {
   return (

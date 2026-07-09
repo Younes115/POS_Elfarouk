@@ -31,6 +31,8 @@ type IpcResponse<T> = IpcSuccess<T> | IpcError;
 export interface PosApi {
   addProduct: (data: AddProductInput) => Promise<IpcResponse<ProductRecord>>;
   getProductBySku: (sku: string) => Promise<IpcResponse<ProductRecord | null>>;
+  getAllProducts: () => Promise<IpcResponse<ProductRecord[]>>;
+  deleteProduct: (id: string) => Promise<IpcResponse<ProductRecord>>;
   createOrder: (
     orderData: CreateOrderInput,
     items: CreateOrderItemInput[],

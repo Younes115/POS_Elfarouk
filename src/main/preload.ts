@@ -10,6 +10,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 const IPC_CHANNELS = {
   ADD_PRODUCT: 'pos:add-product',
   GET_PRODUCT_BY_SKU: 'pos:get-product-by-sku',
+  GET_ALL_PRODUCTS: 'pos:get-all-products',
+  DELETE_PRODUCT: 'pos:delete-product',
   CREATE_ORDER: 'pos:create-order',
   ADD_EXPENSE: 'pos:add-expense',
   GET_DAILY_SUMMARY: 'pos:get-daily-summary',
@@ -22,6 +24,12 @@ contextBridge.exposeInMainWorld('api', {
 
   getProductBySku: (sku: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_PRODUCT_BY_SKU, sku),
+
+  getAllProducts: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_ALL_PRODUCTS),
+
+  deleteProduct: (id: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.DELETE_PRODUCT, id),
 
   // ── Order ────────────────────────────────
   createOrder: (orderData: unknown, items: unknown) =>

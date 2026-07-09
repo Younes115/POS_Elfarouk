@@ -22,6 +22,8 @@ import type {
 export const IPC_CHANNELS = {
   ADD_PRODUCT: 'pos:add-product',
   GET_PRODUCT_BY_SKU: 'pos:get-product-by-sku',
+  GET_ALL_PRODUCTS: 'pos:get-all-products',
+  DELETE_PRODUCT: 'pos:delete-product',
   CREATE_ORDER: 'pos:create-order',
   ADD_EXPENSE: 'pos:add-expense',
   GET_DAILY_SUMMARY: 'pos:get-daily-summary',
@@ -73,6 +75,30 @@ export function registerIpcHandlers(service: PosService): void {
       try {
         const product = await service.getProductBySku(sku);
         return ok(product);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.GET_ALL_PRODUCTS,
+    async () => {
+      try {
+        const products = await service.getAllProducts();
+        return ok(products);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.DELETE_PRODUCT,
+    async (_event, id: string) => {
+      try {
+        const result = await service.deleteProduct(id);
+        return ok(result);
       } catch (err) {
         return fail(err);
       }
