@@ -23,6 +23,9 @@ describe('Order API', () => {
     const product = await service.addProduct({
       sku: 'SALE-ITEM-1',
       name: 'Sale Item',
+      category: 'SNEAKERS',
+      color: 'White',
+      size: '42',
       costPrice: 50,
       sellingPrice: 100,
       stock: 10,
@@ -54,6 +57,9 @@ describe('Order API', () => {
     const product = await service.addProduct({
       sku: 'RET-ITEM-1',
       name: 'Return Item',
+      category: 'HEELS',
+      color: 'Black',
+      size: '38',
       costPrice: 50,
       sellingPrice: 100,
       stock: 5,
@@ -80,11 +86,13 @@ describe('Order API', () => {
     expect(updatedProduct!.stock).toBe(6);
   });
 
-  it('Edge Case: Selling an item when requested quantity is greater than available stock', async () => {
+  it('Edge Case: Oversell protection rejects sale when quantity exceeds stock', async () => {
     // Arrange
     const product = await service.addProduct({
       sku: 'OVERSELL-1',
-      name: 'Oversell Item',
+      name: 'Limited Stock Item',
+      category: 'BAGS',
+      color: 'Brown',
       costPrice: 10,
       sellingPrice: 20,
       stock: 5, // Only 5 available
@@ -100,15 +108,15 @@ describe('Order API', () => {
       { productId: product.id, quantity: 10, costAtSale: 10, priceAtSale: 20 },
     ];
 
-    // Act
-    await service.createOrder(orderData, items);
-    const updatedProduct = await service.getProductBySku('OVERSELL-1');
+    // Act & Assert
+    // The service must throw "Insufficient stock" and the transaction must roll back.
+    await expect(service.createOrder(orderData, items)).rejects.toThrow(
+      /Insufficient stock/
+    );
 
-    // Assert
-    // Prisma does not inherently block negative integers in SQLite unless we strictly enforce it,
-    // but the test explicitly asks to check what happens.
-    // Assuming our current logic just allows it (resulting in -5 stock), we verify that behavior.
-    expect(updatedProduct!.stock).toBe(-5);
+    // Verify the transaction rolled back — stock remains unchanged at 5.
+    const unchangedProduct = await service.getProductBySku('OVERSELL-1');
+    expect(unchangedProduct!.stock).toBe(5);
   });
 
   it('Edge Case: Applying a discountValue greater than subTotal enforces total >= 0', async () => {
@@ -116,6 +124,9 @@ describe('Order API', () => {
     const product = await service.addProduct({
       sku: 'DISCOUNT-1',
       name: 'Discount Item',
+      category: 'SNEAKERS',
+      color: 'Grey',
+      size: '44',
       costPrice: 50,
       sellingPrice: 100,
       stock: 10,

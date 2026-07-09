@@ -17,6 +17,9 @@ model Product {
   id           String      @id @default(uuid())
   sku          String      @unique
   name         String
+  category     String      // e.g., "SNEAKERS", "HEELS", "BAGS"
+  color        String?     // Optional color variant
+  size         String?     // Optional size variant (nullable — bags have no size)
   costPrice    Float
   sellingPrice Float
   stock        Int         @default(0)

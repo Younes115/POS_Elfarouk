@@ -44,6 +44,18 @@ _Avoid_: Item, Goods, Article, SKU (as a synonym for Product)
 The unique machine-readable code that identifies a specific Product variant (e.g., size, color). Not synonymous with Product.
 _Avoid_: Barcode (unless it literally is a barcode value), Product code
 
+**Category**:
+The broad product classification a Product belongs to (e.g., "SNEAKERS", "HEELS", "BAGS"). Every Product has exactly one Category.
+_Avoid_: Type, Kind, Group
+
+**Color**:
+An optional visual variant attribute of a Product (e.g., "Black", "Red"). Nullable.
+_Avoid_: Shade, Hue
+
+**Size**:
+An optional dimensional variant attribute of a Product (e.g., "42", "M"). Nullable because certain categories (Bags) have no meaningful size.
+_Avoid_: Dimension, Fit
+
 **Cost Price**:
 What the store paid a supplier to acquire one unit of a Product. Used for profit calculation.
 _Avoid_: Purchase price, Buy price

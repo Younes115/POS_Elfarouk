@@ -24,6 +24,9 @@ describe('Daily Summary API', () => {
     const product = await service.addProduct({
       sku: 'SUM-ITEM',
       name: 'Summary Item',
+      category: 'SNEAKERS',
+      color: 'Black',
+      size: '42',
       costPrice: 100,
       sellingPrice: 500,
       stock: 100,

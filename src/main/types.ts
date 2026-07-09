@@ -9,6 +9,9 @@
 export interface AddProductInput {
   sku: string;
   name: string;
+  category: string;
+  color?: string | null;
+  size?: string | null;
   costPrice: number;
   sellingPrice: number;
   stock?: number;
@@ -18,6 +21,9 @@ export interface ProductRecord {
   id: string;
   sku: string;
   name: string;
+  category: string;
+  color: string | null;
+  size: string | null;
   costPrice: number;
   sellingPrice: number;
   stock: number;

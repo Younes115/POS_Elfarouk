@@ -51,6 +51,9 @@ export function createPosService(prisma: PrismaClient) {
       data: {
         sku: data.sku,
         name: data.name,
+        category: data.category,
+        color: data.color ?? null,
+        size: data.size ?? null,
         costPrice: data.costPrice,
         sellingPrice: data.sellingPrice,
         stock: data.stock ?? 0,
@@ -117,6 +120,25 @@ export function createPosService(prisma: PrismaClient) {
       const createdItems = [];
 
       for (const item of items) {
+        // Oversell protection: check current stock for SALE orders.
+        if (item.quantity > 0) {
+          const currentProduct = await tx.product.findUnique({
+            where: { id: item.productId },
+            select: { stock: true, name: true },
+          });
+
+          if (!currentProduct) {
+            throw new Error(`Product not found: ${item.productId}`);
+          }
+
+          if (item.quantity > currentProduct.stock) {
+            throw new Error(
+              `Insufficient stock for product "${currentProduct.name}": ` +
+              `requested ${item.quantity}, available ${currentProduct.stock}`
+            );
+          }
+        }
+
         // Freeze cost & price at point-of-sale.
         const orderItem = await tx.orderItem.create({
           data: {
