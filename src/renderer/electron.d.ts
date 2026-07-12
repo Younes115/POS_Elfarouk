@@ -33,6 +33,7 @@ export interface PosApi {
   getProductBySku: (sku: string) => Promise<IpcResponse<ProductRecord | null>>;
   getAllProducts: () => Promise<IpcResponse<ProductRecord[]>>;
   deleteProduct: (id: string) => Promise<IpcResponse<ProductRecord>>;
+  searchProducts: (query: string) => Promise<IpcResponse<ProductRecord[]>>;
   createOrder: (
     orderData: CreateOrderInput,
     items: CreateOrderItemInput[],

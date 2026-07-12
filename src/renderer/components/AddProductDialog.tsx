@@ -90,7 +90,8 @@ export function AddProductDialog({
 
   // ── Submit ─────────────────────────────────
 
-  async function handleSubmit() {
+  async function handleSubmit(e?: React.FormEvent) {
+    if (e) e.preventDefault();
     setError(null);
 
     // Validate required fields (SKU is now optional)
@@ -142,6 +143,30 @@ export function AddProductDialog({
     }
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter') {
+      const formElements = Array.from(
+        e.currentTarget.querySelectorAll('input, select, button[type="submit"]')
+      ) as HTMLElement[];
+      const currentIndex = formElements.indexOf(document.activeElement as HTMLElement);
+      
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const nextElement = formElements[currentIndex + 1];
+        if (nextElement) nextElement.focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prevElement = formElements[currentIndex - 1];
+        if (prevElement) prevElement.focus();
+      } else if (e.key === 'Enter') {
+        if (currentIndex > -1 && currentIndex < formElements.length - 1) {
+          e.preventDefault();
+          formElements[currentIndex + 1].focus();
+        }
+      }
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
@@ -152,7 +177,7 @@ export function AddProductDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <form className="space-y-4" onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
           {error && (
             <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
               {error}
@@ -269,14 +294,13 @@ export function AddProductDialog({
               Cancel
             </Button>
             <Button
-              type="button"
+              type="submit"
               disabled={isSubmitting}
-              onClick={handleSubmit}
             >
-              {isSubmitting ? 'Adding…' : 'Add Product'}
+              {isSubmitting ? 'Saving…' : 'Save'}
             </Button>
           </DialogFooter>
-        </div>
+        </form>
       </DialogContent>
     </Dialog>
   );

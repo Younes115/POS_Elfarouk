@@ -1,49 +1,59 @@
 import { create } from 'zustand';
+import type { ProductRecord } from '../../main/types';
+
+// ── Cart Item ────────────────────────────────
 
 export interface CartItem {
-  productId: string;
-  sku: string;
-  name: string;
-  price: number;
+  product: ProductRecord;
   quantity: number;
 }
 
+// ── Store Interface ──────────────────────────
+
 interface CartStore {
-  items: CartItem[];
-  addItem: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
-  removeItem: (productId: string) => void;
+  cart: CartItem[];
+  addToCart: (product: ProductRecord) => void;
   updateQuantity: (productId: string, quantity: number) => void;
+  removeFromCart: (productId: string) => void;
   clearCart: () => void;
 }
 
+// ── Store ────────────────────────────────────
+
 export const useCartStore = create<CartStore>((set) => ({
-  items: [],
-  addItem: (item) => {
+  cart: [],
+
+  addToCart: (product) => {
     set((state) => {
-      const existingItem = state.items.find((i) => i.productId === item.productId);
-      if (existingItem) {
+      const existing = state.cart.find((item) => item.product.id === product.id);
+      if (existing) {
+        // Auto-merge: increment quantity by 1
         return {
-          items: state.items.map((i) =>
-            i.productId === item.productId
-              ? { ...i, quantity: i.quantity + (item.quantity ?? 1) }
-              : i
+          cart: state.cart.map((item) =>
+            item.product.id === product.id
+              ? { ...item, quantity: item.quantity + 1 }
+              : item
           ),
         };
       }
-      return { items: [...state.items, { ...item, quantity: item.quantity ?? 1 }] };
+      // New item: push with quantity 1
+      return { cart: [...state.cart, { product, quantity: 1 }] };
     });
   },
-  removeItem: (productId) => {
-    set((state) => ({
-      items: state.items.filter((i) => i.productId !== productId),
-    }));
-  },
+
   updateQuantity: (productId, quantity) => {
     set((state) => ({
-      items: state.items.map((i) =>
-        i.productId === productId ? { ...i, quantity } : i
+      cart: state.cart.map((item) =>
+        item.product.id === productId ? { ...item, quantity } : item
       ),
     }));
   },
-  clearCart: () => set({ items: [] }),
+
+  removeFromCart: (productId) => {
+    set((state) => ({
+      cart: state.cart.filter((item) => item.product.id !== productId),
+    }));
+  },
+
+  clearCart: () => set({ cart: [] }),
 }));

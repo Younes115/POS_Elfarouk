@@ -12,6 +12,7 @@ const IPC_CHANNELS = {
   GET_PRODUCT_BY_SKU: 'pos:get-product-by-sku',
   GET_ALL_PRODUCTS: 'pos:get-all-products',
   DELETE_PRODUCT: 'pos:delete-product',
+  SEARCH_PRODUCTS: 'pos:search-products',
   CREATE_ORDER: 'pos:create-order',
   ADD_EXPENSE: 'pos:add-expense',
   GET_DAILY_SUMMARY: 'pos:get-daily-summary',
@@ -30,6 +31,9 @@ contextBridge.exposeInMainWorld('api', {
 
   deleteProduct: (id: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.DELETE_PRODUCT, id),
+
+  searchProducts: (query: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SEARCH_PRODUCTS, query),
 
   // ── Order ────────────────────────────────
   createOrder: (orderData: unknown, items: unknown) =>

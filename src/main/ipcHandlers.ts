@@ -24,6 +24,7 @@ export const IPC_CHANNELS = {
   GET_PRODUCT_BY_SKU: 'pos:get-product-by-sku',
   GET_ALL_PRODUCTS: 'pos:get-all-products',
   DELETE_PRODUCT: 'pos:delete-product',
+  SEARCH_PRODUCTS: 'pos:search-products',
   CREATE_ORDER: 'pos:create-order',
   ADD_EXPENSE: 'pos:add-expense',
   GET_DAILY_SUMMARY: 'pos:get-daily-summary',
@@ -99,6 +100,18 @@ export function registerIpcHandlers(service: PosService): void {
       try {
         const result = await service.deleteProduct(id);
         return ok(result);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SEARCH_PRODUCTS,
+    async (_event, query: string) => {
+      try {
+        const products = await service.searchProducts(query);
+        return ok(products);
       } catch (err) {
         return fail(err);
       }

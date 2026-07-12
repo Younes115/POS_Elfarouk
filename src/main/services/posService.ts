@@ -94,6 +94,25 @@ export function createPosService(prisma: PrismaClient) {
     }));
   }
 
+  async function searchProducts(query: string): Promise<ProductRecord[]> {
+    const products = await prisma.product.findMany({
+      where: {
+        OR: [
+          { sku: { contains: query } },
+          { name: { contains: query } },
+        ],
+      },
+      take: 10,
+      orderBy: { name: 'asc' },
+    });
+
+    return products.map((p) => ({
+      ...p,
+      createdAt: serialiseDate(p.createdAt),
+      updatedAt: serialiseDate(p.updatedAt),
+    }));
+  }
+
   // ── Order (transactional) ──────────────────
 
   /**
@@ -262,6 +281,7 @@ export function createPosService(prisma: PrismaClient) {
     getProductBySku,
     deleteProduct,
     getAllProducts,
+    searchProducts,
     createOrder,
     addExpense,
     getDailySummary,

@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed": "tsx src/main/prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -21,8 +22,10 @@
     "clsx": "^2.1.1",
     "lucide-react": "^1.24.0",
     "react": "^19.2.7",
+    "react-barcode": "^1.6.1",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
+    "react-to-print": "^3.3.0",
     "tailwind-merge": "^3.6.0",
     "tailwindcss-animate": "^1.0.7",
     "zustand": "^5.0.14"
@@ -43,6 +46,7 @@
     "postcss": "^8.5.16",
     "prisma": "^6.19.3",
     "tailwindcss": "^3.4.19",
+    "tsx": "^4.23.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
     "vitest": "^4.1.9",

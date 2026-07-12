@@ -1,5 +1,7 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Package, Plus, AlertTriangle, Trash2 } from 'lucide-react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { Package, Plus, AlertTriangle, Trash2, Printer, Copy, Check } from 'lucide-react';
+import { useReactToPrint } from 'react-to-print';
+import BarcodeTicket from '@/components/BarcodeTicket';
 import { Button } from '@/components/ui/button';
 import {
   Table,
@@ -13,10 +15,58 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AddProductDialog } from '@/components/AddProductDialog';
 import type { ProductRecord } from '../../main/types';
 
+function SkuCopyCell({ sku }: { sku: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(sku);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <span className="inline-flex items-center gap-1.5 group">
+      {sku}
+      <button
+        onClick={handleCopy}
+        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted"
+        title="Copy SKU"
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5 text-green-500" />
+        ) : (
+          <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+      </button>
+    </span>
+  );
+}
+
 export default function Inventory() {
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  // ── Barcode Printing ──────────────────────────
+  const [printProduct, setPrintProduct] = useState<{
+    sku: string;
+    name: string;
+    price: string;
+  } | null>(null);
+  const barcodeRef = useRef<HTMLDivElement>(null);
+
+  const handlePrint = useReactToPrint({
+    contentRef: barcodeRef,
+    documentTitle: printProduct ? `Barcode_${printProduct.sku}` : 'Barcode',
+    onAfterPrint: () => setPrintProduct(null),
+  });
+
+  // Trigger print once the ticket has rendered with the selected product
+  useEffect(() => {
+    if (printProduct && barcodeRef.current) {
+      handlePrint();
+    }
+  }, [printProduct, handlePrint]);
 
   const fetchProducts = useCallback(async () => {
     setIsLoading(true);
@@ -78,7 +128,9 @@ export default function Inventory() {
         <TableBody>
           {filteredProducts.map((product) => (
             <TableRow key={product.id}>
-              <TableCell className="font-mono text-xs">{product.sku}</TableCell>
+              <TableCell className="font-mono text-xs">
+                <SkuCopyCell sku={product.sku} />
+              </TableCell>
               <TableCell className="font-medium">{product.name}</TableCell>
               <TableCell>
                 <span className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold">
@@ -105,15 +157,32 @@ export default function Inventory() {
                 {formatPrice(product.sellingPrice)}
               </TableCell>
               <TableCell className="text-right">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                  onClick={() => handleDelete(product.id)}
-                  title="Delete Product"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-primary hover:bg-primary/10"
+                    onClick={() =>
+                      setPrintProduct({
+                        sku: product.sku,
+                        name: product.name,
+                        price: formatPrice(product.sellingPrice),
+                      })
+                    }
+                    title="Print Barcode"
+                  >
+                    <Printer className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive hover:bg-destructive/10"
+                    onClick={() => handleDelete(product.id)}
+                    title="Delete Product"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}
@@ -207,6 +276,18 @@ export default function Inventory() {
         onProductAdded={fetchProducts}
         existingCategories={categories}
       />
+
+      {/* Hidden Barcode Ticket for Printing */}
+      {printProduct && (
+        <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+          <BarcodeTicket
+            ref={barcodeRef}
+            sku={printProduct.sku}
+            name={printProduct.name}
+            price={printProduct.price}
+          />
+        </div>
+      )}
     </div>
   );
 }
