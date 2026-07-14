@@ -12,6 +12,8 @@ import type {
   CreateOrderInput,
   CreateOrderItemInput,
   OrderRecord,
+  OrderWithItemsRecord,
+  OrderItemRecord,
   AddExpenseInput,
   ExpenseRecord,
   DailySummary,
@@ -67,6 +69,20 @@ export function createPosService(prisma: PrismaClient) {
     };
   }
 
+  async function addBulkProducts(productsData: AddProductInput[]): Promise<void> {
+    const data = productsData.map(p => ({
+      sku: p.sku,
+      name: p.name,
+      category: p.category,
+      color: p.color ?? null,
+      size: p.size ?? null,
+      costPrice: p.costPrice,
+      sellingPrice: p.sellingPrice,
+      stock: p.stock ?? 0,
+    }));
+    await prisma.product.createMany({ data });
+  }
+
   async function getProductBySku(sku: string): Promise<ProductRecord | null> {
     const product = await prisma.product.findUnique({ where: { sku } });
     if (!product) return null;
@@ -80,6 +96,30 @@ export function createPosService(prisma: PrismaClient) {
 
   async function deleteProduct(id: string) {
     return prisma.product.delete({ where: { id } });
+  }
+
+  async function updateProduct(
+    id: string,
+    data: Partial<Omit<AddProductInput, 'sku'>>,
+  ): Promise<ProductRecord> {
+    const product = await prisma.product.update({
+      where: { id },
+      data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.category !== undefined && { category: data.category }),
+        ...(data.color !== undefined && { color: data.color ?? null }),
+        ...(data.size !== undefined && { size: data.size ?? null }),
+        ...(data.costPrice !== undefined && { costPrice: data.costPrice }),
+        ...(data.sellingPrice !== undefined && { sellingPrice: data.sellingPrice }),
+        ...(data.stock !== undefined && { stock: data.stock }),
+      },
+    });
+
+    return {
+      ...product,
+      createdAt: serialiseDate(product.createdAt),
+      updatedAt: serialiseDate(product.updatedAt),
+    };
   }
 
   async function getAllProducts(): Promise<ProductRecord[]> {
@@ -206,6 +246,197 @@ export function createPosService(prisma: PrismaClient) {
     });
   }
 
+  // ── Returns & Exchanges ────────────────────
+
+  /**
+   * Fetch a complete order by its receipt number,
+   * including all order items with nested product data.
+   */
+  async function getOrderByReceipt(
+    receiptNumber: string,
+  ): Promise<OrderWithItemsRecord | null> {
+    const order = await prisma.order.findUnique({
+      where: { receiptNumber },
+      include: {
+        items: {
+          include: { product: true },
+        },
+      },
+    });
+
+    if (!order) return null;
+
+    return {
+      ...order,
+      createdAt: serialiseDate(order.createdAt),
+      items: order.items.map((item) => ({
+        ...item,
+        returnedQuantity: item.returnedQuantity,
+        product: item.product
+          ? {
+              ...item.product,
+              createdAt: serialiseDate(item.product.createdAt),
+              updatedAt: serialiseDate(item.product.updatedAt),
+            }
+          : null,
+      })),
+    };
+  }
+
+  /**
+   * Refund (partially or fully) an order item.
+   * Uses an interactive transaction to:
+   *   1. Verify quantity bounds.
+   *   2. Increment returnedQuantity.
+   *   3. Restore the product stock by qtyToReturn.
+   */
+  async function refundItem(
+    orderItemId: string,
+    qtyToReturn: number,
+  ): Promise<OrderItemRecord> {
+    return prisma.$transaction(async (tx) => {
+      // 1. Fetch the order item
+      const orderItem = await tx.orderItem.findUnique({
+        where: { id: orderItemId },
+        include: { product: true },
+      });
+
+      if (!orderItem) {
+        throw new Error(`Order item not found: ${orderItemId}`);
+      }
+
+      if (qtyToReturn <= 0) {
+        throw new Error('Quantity to return must be greater than 0.');
+      }
+
+      if (orderItem.returnedQuantity + qtyToReturn > orderItem.quantity) {
+        throw new Error(
+          `Cannot return ${qtyToReturn} — only ${orderItem.quantity - orderItem.returnedQuantity} remaining.`,
+        );
+      }
+
+      if (!orderItem.productId) {
+        throw new Error('Cannot refund: product has been deleted from catalog.');
+      }
+
+      // 2. Increment returnedQuantity
+      const updated = await tx.orderItem.update({
+        where: { id: orderItemId },
+        data: { returnedQuantity: { increment: qtyToReturn } },
+      });
+
+      // 3. Restore stock
+      await tx.product.update({
+        where: { id: orderItem.productId },
+        data: { stock: { increment: qtyToReturn } },
+      });
+
+      return {
+        ...updated,
+        returnedQuantity: updated.returnedQuantity,
+      };
+    });
+  }
+
+  /**
+   * Exchange (partially or fully) an order item for a different product.
+   * Uses an interactive transaction to:
+   *   1. Verify quantity bounds on the old item.
+   *   2. Verify new product exists and has enough stock.
+   *   3. Increment old item's returnedQuantity, restore its stock.
+   *   4. Decrement new product stock.
+   *   5. Create a new OrderItem for the exchanged quantity.
+   */
+  async function exchangeItem(
+    orderItemId: string,
+    qtyToExchange: number,
+    newProductSku: string,
+  ): Promise<OrderItemRecord> {
+    return prisma.$transaction(async (tx) => {
+      // 1. Fetch old order item
+      const oldItem = await tx.orderItem.findUnique({
+        where: { id: orderItemId },
+        include: { product: true },
+      });
+
+      if (!oldItem) {
+        throw new Error(`Order item not found: ${orderItemId}`);
+      }
+
+      if (qtyToExchange <= 0) {
+        throw new Error('Quantity to exchange must be greater than 0.');
+      }
+
+      if (oldItem.returnedQuantity + qtyToExchange > oldItem.quantity) {
+        throw new Error(
+          `Cannot exchange ${qtyToExchange} — only ${oldItem.quantity - oldItem.returnedQuantity} remaining.`,
+        );
+      }
+
+      if (!oldItem.productId) {
+        throw new Error('Cannot exchange: original product has been deleted.');
+      }
+
+      // 2. Fetch new product by SKU
+      const newProduct = await tx.product.findUnique({
+        where: { sku: newProductSku },
+      });
+
+      if (!newProduct) {
+        throw new Error(`New product not found with SKU: ${newProductSku}`);
+      }
+
+      if (newProduct.stock < qtyToExchange) {
+        throw new Error(
+          `Insufficient stock for "${newProduct.name}": ` +
+          `need ${qtyToExchange}, available ${newProduct.stock}`,
+        );
+      }
+
+      // 3. Increment returnedQuantity on old item and restore stock
+      await tx.orderItem.update({
+        where: { id: orderItemId },
+        data: { returnedQuantity: { increment: qtyToExchange } },
+      });
+
+      await tx.product.update({
+        where: { id: oldItem.productId },
+        data: { stock: { increment: qtyToExchange } },
+      });
+
+      // 4. Decrement new product stock
+      await tx.product.update({
+        where: { id: newProduct.id },
+        data: { stock: { decrement: qtyToExchange } },
+      });
+
+      // 5. Create replacement OrderItem with new product's current prices
+      const newOrderItem = await tx.orderItem.create({
+        data: {
+          orderId: oldItem.orderId,
+          productId: newProduct.id,
+          quantity: qtyToExchange,
+          costAtSale: newProduct.costPrice,
+          priceAtSale: newProduct.sellingPrice,
+          returnedQuantity: 0,
+        },
+        include: { product: true },
+      });
+
+      return {
+        ...newOrderItem,
+        returnedQuantity: newOrderItem.returnedQuantity,
+        product: newOrderItem.product
+          ? {
+              ...newOrderItem.product,
+              createdAt: serialiseDate(newOrderItem.product.createdAt),
+              updatedAt: serialiseDate(newOrderItem.product.updatedAt),
+            }
+          : null,
+      };
+    });
+  }
+
   // ── Expense ────────────────────────────────
 
   async function addExpense(data: AddExpenseInput): Promise<ExpenseRecord> {
@@ -278,11 +509,16 @@ export function createPosService(prisma: PrismaClient) {
 
   return {
     addProduct,
+    addBulkProducts,
     getProductBySku,
     deleteProduct,
+    updateProduct,
     getAllProducts,
     searchProducts,
     createOrder,
+    getOrderByReceipt,
+    refundItem,
+    exchangeItem,
     addExpense,
     getDailySummary,
   } as const;

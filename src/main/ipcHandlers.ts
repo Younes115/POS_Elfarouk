@@ -21,11 +21,16 @@ import type {
 
 export const IPC_CHANNELS = {
   ADD_PRODUCT: 'pos:add-product',
+  ADD_BULK_PRODUCTS: 'pos:add-bulk-products',
   GET_PRODUCT_BY_SKU: 'pos:get-product-by-sku',
   GET_ALL_PRODUCTS: 'pos:get-all-products',
   DELETE_PRODUCT: 'pos:delete-product',
+  UPDATE_PRODUCT: 'pos:update-product',
   SEARCH_PRODUCTS: 'pos:search-products',
   CREATE_ORDER: 'pos:create-order',
+  GET_ORDER_BY_RECEIPT: 'pos:get-order-by-receipt',
+  REFUND_ITEM: 'pos:refund-item',
+  EXCHANGE_ITEM: 'pos:exchange-item',
   ADD_EXPENSE: 'pos:add-expense',
   GET_DAILY_SUMMARY: 'pos:get-daily-summary',
 } as const;
@@ -71,6 +76,18 @@ export function registerIpcHandlers(service: PosService): void {
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.ADD_BULK_PRODUCTS,
+    async (_event, data: AddProductInput[]) => {
+      try {
+        await service.addBulkProducts(data);
+        return ok(null);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.GET_PRODUCT_BY_SKU,
     async (_event, sku: string) => {
       try {
@@ -100,6 +117,18 @@ export function registerIpcHandlers(service: PosService): void {
       try {
         const result = await service.deleteProduct(id);
         return ok(result);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.UPDATE_PRODUCT,
+    async (_event, id: string, data: Partial<AddProductInput>) => {
+      try {
+        const product = await service.updateProduct(id, data);
+        return ok(product);
       } catch (err) {
         return fail(err);
       }
@@ -158,6 +187,44 @@ export function registerIpcHandlers(service: PosService): void {
       try {
         const summary = await service.getDailySummary(dateStr);
         return ok(summary);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  // ── Returns & Exchanges ──────────────────
+
+  ipcMain.handle(
+    IPC_CHANNELS.GET_ORDER_BY_RECEIPT,
+    async (_event, receiptNumber: string) => {
+      try {
+        const order = await service.getOrderByReceipt(receiptNumber);
+        return ok(order);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.REFUND_ITEM,
+    async (_event, orderItemId: string, qtyToReturn: number) => {
+      try {
+        const result = await service.refundItem(orderItemId, qtyToReturn);
+        return ok(result);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.EXCHANGE_ITEM,
+    async (_event, orderItemId: string, qtyToExchange: number, newProductSku: string) => {
+      try {
+        const result = await service.exchangeItem(orderItemId, qtyToExchange, newProductSku);
+        return ok(result);
       } catch (err) {
         return fail(err);
       }

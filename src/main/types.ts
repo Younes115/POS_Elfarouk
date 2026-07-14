@@ -68,6 +68,21 @@ export interface OrderItemRecord {
   quantity: number;
   costAtSale: number;
   priceAtSale: number;
+  returnedQuantity: number;
+  product?: ProductRecord | null;
+}
+
+// Used by getOrderByReceipt — includes full product info on each item
+export interface OrderWithItemsRecord {
+  id: string;
+  receiptNumber: string;
+  subTotal: number;
+  discountValue: number;
+  offerName: string | null;
+  total: number;
+  type: string;
+  createdAt: string;
+  items: OrderItemRecord[];
 }
 
 // ── Expense ──────────────────────────────────

@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Trash2, Plus } from 'lucide-react';
 
 interface AddProductDialogProps {
   open: boolean;
@@ -18,27 +19,32 @@ interface AddProductDialogProps {
   existingCategories: string[];
 }
 
-
 interface FormData {
-  sku: string;
   name: string;
   category: string;
-  color: string;
-  size: string;
   costPrice: string;
   sellingPrice: string;
-  stock: string;
+  // BAGS mode
+  qtyPerColor: string;
+  // Default series mode
+  startSize: string;
+  numCartons: string;
+  // Custom sizes mode
+  customSizes: string;
+  // Toggle
+  useCustomSizes: boolean;
 }
 
 const INITIAL_FORM: FormData = {
-  sku: '',
   name: '',
   category: '',
-  color: '',
-  size: '',
   costPrice: '',
   sellingPrice: '',
-  stock: '',
+  qtyPerColor: '',
+  startSize: '',
+  numCartons: '1',
+  customSizes: '',
+  useCustomSizes: false,
 };
 
 /**
@@ -46,7 +52,7 @@ const INITIAL_FORM: FormData = {
  * Example: SNK-A7B2, BAG-9F1D
  * For unknown categories, uses the first 3 letters uppercased.
  */
-function generateSku(category: string): string {
+function generateSmartSKU(category: string): string {
   // 1. Extract only English letters from the category
   const engChars = category.replace(/[^A-Za-z]/g, '');
 
@@ -69,6 +75,8 @@ export function AddProductDialog({
   existingCategories,
 }: AddProductDialogProps) {
   const [formData, setFormData] = useState<FormData>({ ...INITIAL_FORM });
+  const [hasSizes, setHasSizes] = useState<boolean>(true);
+  const [colorsList, setColorsList] = useState<string[]>(['']);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,6 +88,8 @@ export function AddProductDialog({
 
   function resetForm() {
     setFormData({ ...INITIAL_FORM });
+    setHasSizes(true);
+    setColorsList(['']);
     setError(null);
   }
 
@@ -88,21 +98,34 @@ export function AddProductDialog({
     onOpenChange(isOpen);
   }
 
+  // ── Dialog title ───────────────────────────
+  function getDialogTitle(): string {
+    if (!hasSizes) return 'Add Product';
+    if (formData.useCustomSizes) return 'Add Custom Series';
+    return 'Add Carton/Series';
+  }
+
+  function getDialogDescription(): string {
+    if (!hasSizes) return 'Add products with no size variants — one entry per color.';
+    if (formData.useCustomSizes) return 'Enter custom sizes (comma-separated) to generate one product per size per color.';
+    return 'Input the carton details to auto-generate a 5-size sequence per color.';
+  }
+
   // ── Submit ─────────────────────────────────
 
   async function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
     setError(null);
 
-    // Validate required fields (SKU is now optional)
-    if (
-      !formData.name ||
-      !formData.category ||
-      !formData.costPrice ||
-      !formData.sellingPrice ||
-      !formData.stock
-    ) {
+    // Common validations
+    if (!formData.name || !formData.category || !formData.costPrice || !formData.sellingPrice) {
       setError('Please fill in all required fields.');
+      return;
+    }
+
+    const validColors = colorsList.map(c => c.trim()).filter(Boolean);
+    if (validColors.length === 0) {
+      setError('Please enter at least one color.');
       return;
     }
 
@@ -111,22 +134,91 @@ export function AddProductDialog({
       return;
     }
 
+    // Mode-specific validations
+    if (!hasSizes) {
+      if (!formData.qtyPerColor) {
+        setError('Please enter the quantity per color.');
+        return;
+      }
+    } else if (formData.useCustomSizes) {
+      if (!formData.customSizes) {
+        setError('Please enter custom sizes (comma-separated).');
+        return;
+      }
+    } else {
+      if (!formData.startSize || !formData.numCartons) {
+        setError('Please enter Start Size and Number of Cartons.');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
-      // Auto-generate SKU if left blank
-      const finalSku = formData.sku.trim() || generateSku(formData.category);
+      const colorsArray = validColors;
+      const variantsToInsert = [];
 
-      const result = await window.api.addProduct({
-        sku: finalSku,
-        name: formData.name.trim(),
-        category: formData.category,
-        color: formData.color.trim() || null,
-        size: formData.size.trim() || null,
-        costPrice: Number(formData.costPrice),
-        sellingPrice: Number(formData.sellingPrice),
-        stock: Number(formData.stock),
-      });
+      if (!hasSizes) {
+        // ── NO SIZES: One product per color ──
+        const qtyPerColor = Number(formData.qtyPerColor) || 0;
+        for (const color of colorsArray) {
+          variantsToInsert.push({
+            sku: generateSmartSKU(formData.category),
+            name: formData.name.trim(),
+            category: formData.category,
+            color,
+            size: null,
+            costPrice: Number(formData.costPrice),
+            sellingPrice: Number(formData.sellingPrice),
+            stock: qtyPerColor,
+          });
+        }
+      } else if (formData.useCustomSizes) {
+        // ── CUSTOM SIZES: Aggregate duplicate sizes ──
+        const sizesArray = formData.customSizes.split(',').map(s => s.trim()).filter(Boolean);
+        const sizeFrequency: Record<string, number> = {};
+        sizesArray.forEach(size => {
+          sizeFrequency[size] = (sizeFrequency[size] || 0) + 1;
+        });
+
+        const numCartons = Number(formData.numCartons) || 1;
+
+        for (const color of colorsArray) {
+          for (const size of Object.keys(sizeFrequency)) {
+            variantsToInsert.push({
+              sku: generateSmartSKU(formData.category),
+              name: formData.name.trim(),
+              category: formData.category,
+              color,
+              size,
+              costPrice: Number(formData.costPrice),
+              sellingPrice: Number(formData.sellingPrice),
+              stock: sizeFrequency[size] * numCartons,
+            });
+          }
+        }
+      } else {
+        // ── DEFAULT SERIES: numCartons × 5 sizes ──
+        const startSize = Number(formData.startSize);
+        const numCartons = Number(formData.numCartons) || 1;
+        for (const color of colorsArray) {
+          for (let i = 0; i < 5; i++) {
+            const currentSize = startSize + i;
+            variantsToInsert.push({
+              sku: generateSmartSKU(formData.category),
+              name: formData.name.trim(),
+              category: formData.category,
+              color,
+              size: currentSize.toString(),
+              costPrice: Number(formData.costPrice),
+              sellingPrice: Number(formData.sellingPrice),
+              stock: numCartons,
+            });
+          }
+        }
+      }
+
+      const result = await window.api.addBulkProducts(variantsToInsert);
 
       if (!result.success) {
         setError(result.error);
@@ -169,11 +261,11 @@ export function AddProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add New Product</DialogTitle>
+          <DialogTitle>{getDialogTitle()}</DialogTitle>
           <DialogDescription>
-            Fill in the product details below. Fields marked with * are required.
+            {getDialogDescription()}
           </DialogDescription>
         </DialogHeader>
 
@@ -184,26 +276,15 @@ export function AddProductDialog({
             </div>
           )}
 
-          {/* SKU & Name */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="add-sku">SKU / Barcode</Label>
-              <Input
-                id="add-sku"
-                placeholder="Scan or leave blank to auto-generate"
-                value={formData.sku}
-                onChange={(e) => updateField('sku', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="add-name">Product Name *</Label>
-              <Input
-                id="add-name"
-                placeholder="e.g. Nike Air Max 90"
-                value={formData.name}
-                onChange={(e) => updateField('name', e.target.value)}
-              />
-            </div>
+          {/* Name */}
+          <div className="space-y-2">
+            <Label htmlFor="add-name">Product Name *</Label>
+            <Input
+              id="add-name"
+              placeholder="e.g. Nike Air Max 90"
+              value={formData.name}
+              onChange={(e) => updateField('name', e.target.value)}
+            />
           </div>
 
           {/* Category */}
@@ -212,7 +293,7 @@ export function AddProductDialog({
             <Input
               id="add-category"
               list="category-suggestions"
-              placeholder="e.g. SNEAKERS, SOCKS, WALLETS"
+              placeholder="e.g. SNEAKERS, BAGS, HEELS"
               value={formData.category}
               onChange={(e) => updateField('category', e.target.value.toUpperCase())}
             />
@@ -223,30 +304,170 @@ export function AddProductDialog({
             </datalist>
           </div>
 
-          {/* Color & Size */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="add-color">Color</Label>
-              <Input
-                id="add-color"
-                placeholder="e.g. Black"
-                value={formData.color}
-                onChange={(e) => updateField('color', e.target.value.replace(/[0-9]/g, ''))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="add-size">Size</Label>
-              <Input
-                id="add-size"
-                placeholder="e.g. 42"
-                value={formData.size}
-                onChange={(e) => updateField('size', e.target.value.replace(/[^0-9]/g, ''))}
-              />
-            </div>
+          {/* Has Sizes Toggle */}
+          <div className="flex items-center gap-3 rounded-lg border p-3 bg-muted/30">
+            <label
+              htmlFor="add-hasSizesToggle"
+              className="flex items-center gap-3 cursor-pointer select-none flex-1"
+            >
+              <div className="relative">
+                <input
+                  id="add-hasSizesToggle"
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={hasSizes}
+                  onChange={(e) => setHasSizes(e.target.checked)}
+                />
+                <div className="w-10 h-5 bg-muted-foreground/30 rounded-full peer-checked:bg-primary transition-colors" />
+                <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform peer-checked:translate-x-5" />
+              </div>
+              <div>
+                <span className="text-sm font-medium">Item has size variations?</span>
+                <p className="text-xs text-muted-foreground">
+                  Toggle off if this product does not have sizes (e.g., bags, accessories)
+                </p>
+              </div>
+            </label>
           </div>
 
-          {/* Prices & Stock */}
-          <div className="grid grid-cols-3 gap-4">
+          {/* Colors */}
+          <div className="space-y-2">
+            <Label>Colors *</Label>
+            <div className="space-y-2">
+              {colorsList.map((color, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <Input
+                    placeholder="e.g. White"
+                    value={color}
+                    onChange={(e) => {
+                      const newList = [...colorsList];
+                      newList[index] = e.target.value;
+                      setColorsList(newList);
+                    }}
+                  />
+                  {colorsList.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive shrink-0"
+                      onClick={() => {
+                        const newList = [...colorsList];
+                        newList.splice(index, 1);
+                        setColorsList(newList);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2 text-xs h-8 gap-1"
+              onClick={() => setColorsList([...colorsList, ''])}
+            >
+              <Plus className="h-3 w-3" />
+              Add Color
+            </Button>
+          </div>
+
+          {/* ── NO SIZES: Quantity per Color ── */}
+          {!hasSizes && (
+            <div className="space-y-2">
+              <Label htmlFor="add-qtyPerColor">Total Quantity per Color *</Label>
+              <Input
+                id="add-qtyPerColor"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="e.g. 10"
+                value={formData.qtyPerColor}
+                onChange={(e) => updateField('qtyPerColor', e.target.value)}
+              />
+            </div>
+          )}
+
+          {/* ── WITH SIZES: Size controls ── */}
+          {hasSizes && (
+            <>
+              {/* Custom Sizes Toggle */}
+              <div className="flex items-center gap-3 rounded-lg border p-3 bg-muted/30">
+                <label
+                  htmlFor="add-customToggle"
+                  className="flex items-center gap-3 cursor-pointer select-none flex-1"
+                >
+                  <div className="relative">
+                    <input
+                      id="add-customToggle"
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={formData.useCustomSizes}
+                      onChange={(e) => updateField('useCustomSizes', e.target.checked)}
+                    />
+                    <div className="w-10 h-5 bg-muted-foreground/30 rounded-full peer-checked:bg-primary transition-colors" />
+                    <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-transform peer-checked:translate-x-5" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium">Custom Sizes (Uneven Carton)</span>
+                    <p className="text-xs text-muted-foreground">
+                      Enter sizes manually instead of auto-generating a 5-size series
+                    </p>
+                  </div>
+                </label>
+              </div>
+
+              {formData.useCustomSizes ? (
+                /* Custom Sizes Input */
+                <div className="space-y-2">
+                  <Label htmlFor="add-customSizes">Custom Sizes (comma separated) *</Label>
+                  <Input
+                    id="add-customSizes"
+                    placeholder="e.g. 37, 37, 39, 40, 41"
+                    value={formData.customSizes}
+                    onChange={(e) => updateField('customSizes', e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Each listed size generates one product per color. Duplicates = multiple units.
+                  </p>
+                </div>
+              ) : (
+                /* Default: Start Size + Number of Cartons */
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="add-startSize">Start Size *</Label>
+                    <Input
+                      id="add-startSize"
+                      placeholder="e.g. 37"
+                      value={formData.startSize}
+                      onChange={(e) => updateField('startSize', e.target.value.replace(/[^0-9]/g, ''))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="add-numCartons">Number of Cartons *</Label>
+                    <Input
+                      id="add-numCartons"
+                      type="number"
+                      min="1"
+                      step="1"
+                      placeholder="1"
+                      value={formData.numCartons}
+                      onChange={(e) => updateField('numCartons', e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Stock per size = number of cartons
+                    </p>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Prices */}
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="add-costPrice">Cost Price *</Label>
               <Input
@@ -269,18 +490,6 @@ export function AddProductDialog({
                 placeholder="0.00"
                 value={formData.sellingPrice}
                 onChange={(e) => updateField('sellingPrice', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="add-stock">Initial Stock *</Label>
-              <Input
-                id="add-stock"
-                type="number"
-                min="0"
-                step="1"
-                placeholder="0"
-                value={formData.stock}
-                onChange={(e) => updateField('stock', e.target.value)}
               />
             </div>
           </div>

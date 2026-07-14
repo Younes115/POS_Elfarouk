@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { ShoppingCart, Package, Receipt } from 'lucide-react';
+import { ShoppingCart, Package, RotateCcw, Receipt } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function Layout() {
@@ -8,6 +8,7 @@ export function Layout() {
   const navItems = [
     { name: 'Cashier', path: '/', icon: ShoppingCart },
     { name: 'Inventory', path: '/inventory', icon: Package },
+    { name: 'Returns', path: '/returns', icon: RotateCcw },
     { name: 'Expenses', path: '/expenses', icon: Receipt },
   ];
 

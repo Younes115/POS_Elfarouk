@@ -9,7 +9,7 @@
 // ─────────────────────────────────────────────
 
 import type { PosApi } from './electron';
-import type { ProductRecord } from '../main/types';
+import type { ProductRecord, OrderWithItemsRecord, OrderItemRecord } from '../main/types';
 
 // In-memory store for dev mode — pre-populated with seed data
 // so Inventory and Cashier work out of the box during Vite-only dev.
@@ -35,6 +35,23 @@ function nextId() {
   return `mock-${++idCounter}`;
 }
 
+// In-memory order store so Returns page mock can look up by receipt
+interface MockOrderItem extends OrderItemRecord {
+  returnedQuantity: number;
+}
+interface MockOrder {
+  id: string;
+  receiptNumber: string;
+  subTotal: number;
+  discountValue: number;
+  offerName: string | null;
+  total: number;
+  type: string;
+  createdAt: string;
+  items: MockOrderItem[];
+}
+const mockOrders: MockOrder[] = [];
+
 const mockApi: PosApi = {
   addProduct: async (data) => {
     const now = new Date().toISOString();
@@ -53,6 +70,25 @@ const mockApi: PosApi = {
     };
     mockProducts.unshift(product);
     return { success: true, data: product };
+  },
+
+  addBulkProducts: async (productsData) => {
+    const now = new Date().toISOString();
+    const newProducts = productsData.map(data => ({
+      id: nextId(),
+      sku: data.sku,
+      name: data.name,
+      category: data.category,
+      color: data.color ?? null,
+      size: data.size ?? null,
+      costPrice: data.costPrice,
+      sellingPrice: data.sellingPrice,
+      stock: data.stock ?? 0,
+      createdAt: now,
+      updatedAt: now,
+    }));
+    mockProducts.unshift(...newProducts.reverse());
+    return { success: true, data: null };
   },
 
   getProductBySku: async (sku) => {
@@ -81,6 +117,21 @@ const mockApi: PosApi = {
     return { success: false, error: 'Product not found' };
   },
 
+  updateProduct: async (id: string, data: Partial<ProductRecord>) => {
+    const product = mockProducts.find((p) => p.id === id);
+    if (!product) {
+      return { success: false, error: 'Product not found' };
+    }
+    if (data.name !== undefined) product.name = data.name;
+    if (data.color !== undefined) product.color = data.color ?? null;
+    if (data.size !== undefined) product.size = data.size ?? null;
+    if (data.costPrice !== undefined) product.costPrice = data.costPrice;
+    if (data.sellingPrice !== undefined) product.sellingPrice = data.sellingPrice;
+    if (data.stock !== undefined) product.stock = data.stock;
+    product.updatedAt = new Date().toISOString();
+    return { success: true, data: { ...product } };
+  },
+
   createOrder: async (orderData, items) => {
     // Validate stock before mutating
     for (const item of items) {
@@ -102,26 +153,34 @@ const mockApi: PosApi = {
       product.stock -= item.quantity;
     }
 
+    const orderId = nextId();
+    const orderItems = items.map((item) => ({
+      id: nextId(),
+      orderId,
+      productId: item.productId,
+      quantity: item.quantity,
+      costAtSale: item.costAtSale,
+      priceAtSale: item.priceAtSale,
+      returnedQuantity: 0,
+    }));
+
+    const order = {
+      id: orderId,
+      receiptNumber: orderData.receiptNumber ?? `RCP-${Date.now()}`,
+      subTotal: orderData.subTotal ?? 0,
+      discountValue: orderData.discountValue ?? 0,
+      offerName: orderData.offerName ?? null,
+      total: orderData.total ?? 0,
+      type: orderData.type ?? 'SALE',
+      createdAt: new Date().toISOString(),
+      items: orderItems,
+    };
+
+    mockOrders.push(order);
+
     return {
       success: true,
-      data: {
-        id: nextId(),
-        receiptNumber: orderData.receiptNumber ?? `RCP-${Date.now()}`,
-        subTotal: orderData.subTotal ?? 0,
-        discountValue: orderData.discountValue ?? 0,
-        offerName: orderData.offerName ?? null,
-        total: orderData.total ?? 0,
-        type: orderData.type ?? 'SALE',
-        createdAt: new Date().toISOString(),
-        items: items.map((item) => ({
-          id: nextId(),
-          orderId: '',
-          productId: item.productId,
-          quantity: item.quantity,
-          costAtSale: item.costAtSale,
-          priceAtSale: item.priceAtSale,
-        })),
-      },
+      data: order,
     };
   },
 
@@ -150,6 +209,81 @@ const mockApi: PosApi = {
         returnCount: 0,
       },
     };
+  },
+
+  getOrderByReceipt: async (receiptNumber) => {
+    const order = mockOrders.find((o) => o.receiptNumber === receiptNumber);
+    if (!order) return { success: true, data: null };
+    return {
+      success: true,
+      data: {
+        ...order,
+        items: order.items.map((item) => ({
+          ...item,
+          product: mockProducts.find((p) => p.id === item.productId) ?? null,
+        })),
+      },
+    };
+  },
+
+  refundItem: async (orderItemId, qtyToReturn) => {
+    for (const order of mockOrders) {
+      const item = order.items.find((i) => i.id === orderItemId);
+      if (item) {
+        if (qtyToReturn <= 0) {
+          return { success: false, error: 'Quantity to return must be greater than 0.' };
+        }
+        if (item.returnedQuantity + qtyToReturn > item.quantity) {
+          return { success: false, error: `Cannot return ${qtyToReturn} — only ${item.quantity - item.returnedQuantity} remaining.` };
+        }
+        item.returnedQuantity += qtyToReturn;
+        const product = mockProducts.find((p) => p.id === item.productId);
+        if (product) product.stock += qtyToReturn;
+        return { success: true, data: { ...item } };
+      }
+    }
+    return { success: false, error: 'Order item not found' };
+  },
+
+  exchangeItem: async (orderItemId, qtyToExchange, newProductSku) => {
+    for (const order of mockOrders) {
+      const oldItem = order.items.find((i) => i.id === orderItemId);
+      if (oldItem) {
+        if (qtyToExchange <= 0) {
+          return { success: false, error: 'Quantity to exchange must be greater than 0.' };
+        }
+        if (oldItem.returnedQuantity + qtyToExchange > oldItem.quantity) {
+          return { success: false, error: `Cannot exchange ${qtyToExchange} — only ${oldItem.quantity - oldItem.returnedQuantity} remaining.` };
+        }
+        const newProduct = mockProducts.find((p) => p.sku === newProductSku);
+        if (!newProduct) {
+          return { success: false, error: `Product not found with SKU: ${newProductSku}` };
+        }
+        if (newProduct.stock < qtyToExchange) {
+          return { success: false, error: `Insufficient stock for "${newProduct.name}"` };
+        }
+        // Increment returnedQuantity on old item, restore stock
+        oldItem.returnedQuantity += qtyToExchange;
+        const oldProduct = mockProducts.find((p) => p.id === oldItem.productId);
+        if (oldProduct) oldProduct.stock += qtyToExchange;
+        // Decrement new product stock
+        newProduct.stock -= qtyToExchange;
+        // Create new order item
+        const newItem = {
+          id: nextId(),
+          orderId: order.id,
+          productId: newProduct.id,
+          quantity: qtyToExchange,
+          costAtSale: newProduct.costPrice,
+          priceAtSale: newProduct.sellingPrice,
+          returnedQuantity: 0,
+          product: { ...newProduct },
+        };
+        order.items.push(newItem);
+        return { success: true, data: newItem };
+      }
+    }
+    return { success: false, error: 'Order item not found' };
   },
 };
 

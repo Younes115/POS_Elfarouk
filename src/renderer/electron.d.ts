@@ -11,6 +11,8 @@ import type {
   CreateOrderInput,
   CreateOrderItemInput,
   OrderRecord,
+  OrderWithItemsRecord,
+  OrderItemRecord,
   AddExpenseInput,
   ExpenseRecord,
   DailySummary,
@@ -30,14 +32,19 @@ type IpcResponse<T> = IpcSuccess<T> | IpcError;
 
 export interface PosApi {
   addProduct: (data: AddProductInput) => Promise<IpcResponse<ProductRecord>>;
+  addBulkProducts: (data: AddProductInput[]) => Promise<IpcResponse<null>>;
   getProductBySku: (sku: string) => Promise<IpcResponse<ProductRecord | null>>;
   getAllProducts: () => Promise<IpcResponse<ProductRecord[]>>;
   deleteProduct: (id: string) => Promise<IpcResponse<ProductRecord>>;
+  updateProduct: (id: string, data: Partial<Omit<AddProductInput, 'sku'>>) => Promise<IpcResponse<ProductRecord>>;
   searchProducts: (query: string) => Promise<IpcResponse<ProductRecord[]>>;
   createOrder: (
     orderData: CreateOrderInput,
     items: CreateOrderItemInput[],
   ) => Promise<IpcResponse<OrderRecord>>;
+  getOrderByReceipt: (receiptNumber: string) => Promise<IpcResponse<OrderWithItemsRecord | null>>;
+  refundItem: (orderItemId: string, qtyToReturn: number) => Promise<IpcResponse<OrderItemRecord>>;
+  exchangeItem: (orderItemId: string, qtyToExchange: number, newProductSku: string) => Promise<IpcResponse<OrderItemRecord>>;
   addExpense: (data: AddExpenseInput) => Promise<IpcResponse<ExpenseRecord>>;
   getDailySummary: (dateStr: string) => Promise<IpcResponse<DailySummary>>;
 }
