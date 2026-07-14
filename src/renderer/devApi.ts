@@ -9,7 +9,7 @@
 // ─────────────────────────────────────────────
 
 import type { PosApi } from './electron';
-import type { ProductRecord, OrderWithItemsRecord, OrderItemRecord } from '../main/types';
+import type { ProductRecord, OrderItemRecord } from '../main/types';
 
 // In-memory store for dev mode — pre-populated with seed data
 // so Inventory and Cashier work out of the box during Vite-only dev.
@@ -51,6 +51,7 @@ interface MockOrder {
   items: MockOrderItem[];
 }
 const mockOrders: MockOrder[] = [];
+const mockExpenses: { id: string; category: string; description: string; amount: number; createdAt: string }[] = [];
 
 const mockApi: PosApi = {
   addProduct: async (data) => {
@@ -184,16 +185,38 @@ const mockApi: PosApi = {
     };
   },
 
-  addExpense: async (data) => {
-    return {
-      success: true,
-      data: {
-        id: nextId(),
-        description: data.description,
-        amount: data.amount,
-        createdAt: new Date().toISOString(),
-      },
+  createExpense: async (amount, category, description) => {
+    if (amount <= 0) return { success: false, error: 'Expense amount must be greater than 0.' };
+    if (!category || category.trim() === '') return { success: false, error: 'Expense category is required.' };
+    if (!description || description.trim() === '') return { success: false, error: 'Expense description is required.' };
+    const expense = {
+      id: nextId(),
+      category: category.trim(),
+      description: description.trim(),
+      amount,
+      createdAt: new Date().toISOString(),
     };
+    mockExpenses.push(expense);
+    return { success: true, data: expense };
+  },
+
+  getDailyExpenses: async (dateStr) => {
+    const start = new Date(dateStr);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(dateStr);
+    end.setHours(23, 59, 59, 999);
+    const filtered = mockExpenses.filter((e) => {
+      const d = new Date(e.createdAt);
+      return d >= start && d <= end;
+    });
+    return { success: true, data: filtered };
+  },
+
+  deleteExpense: async (id) => {
+    const idx = mockExpenses.findIndex((e) => e.id === id);
+    if (idx === -1) return { success: false, error: 'Expense not found' };
+    const [deleted] = mockExpenses.splice(idx, 1);
+    return { success: true, data: deleted };
   },
 
   getDailySummary: async (dateStr) => {

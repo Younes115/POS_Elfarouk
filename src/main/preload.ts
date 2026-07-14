@@ -19,7 +19,9 @@ const IPC_CHANNELS = {
   GET_ORDER_BY_RECEIPT: 'pos:get-order-by-receipt',
   REFUND_ITEM: 'pos:refund-item',
   EXCHANGE_ITEM: 'pos:exchange-item',
-  ADD_EXPENSE: 'pos:add-expense',
+  CREATE_EXPENSE: 'pos:create-expense',
+  GET_DAILY_EXPENSES: 'pos:get-daily-expenses',
+  DELETE_EXPENSE: 'pos:delete-expense',
   GET_DAILY_SUMMARY: 'pos:get-daily-summary',
 } as const;
 
@@ -61,8 +63,14 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke(IPC_CHANNELS.EXCHANGE_ITEM, orderItemId, qtyToExchange, newProductSku),
 
   // ── Expense ──────────────────────────────
-  addExpense: (data: unknown) =>
-    ipcRenderer.invoke(IPC_CHANNELS.ADD_EXPENSE, data),
+  createExpense: (amount: number, category: string, description: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.CREATE_EXPENSE, amount, category, description),
+
+  getDailyExpenses: (dateStr: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_DAILY_EXPENSES, dateStr),
+
+  deleteExpense: (id: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.DELETE_EXPENSE, id),
 
   // ── Daily Summary ────────────────────────
   getDailySummary: (dateStr: string) =>

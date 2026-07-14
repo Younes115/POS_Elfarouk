@@ -14,7 +14,6 @@ import type {
   AddProductInput,
   CreateOrderInput,
   CreateOrderItemInput,
-  AddExpenseInput,
 } from './types.js';
 
 // ── IPC Channel Constants ────────────────────
@@ -31,7 +30,9 @@ export const IPC_CHANNELS = {
   GET_ORDER_BY_RECEIPT: 'pos:get-order-by-receipt',
   REFUND_ITEM: 'pos:refund-item',
   EXCHANGE_ITEM: 'pos:exchange-item',
-  ADD_EXPENSE: 'pos:add-expense',
+  CREATE_EXPENSE: 'pos:create-expense',
+  GET_DAILY_EXPENSES: 'pos:get-daily-expenses',
+  DELETE_EXPENSE: 'pos:delete-expense',
   GET_DAILY_SUMMARY: 'pos:get-daily-summary',
 } as const;
 
@@ -168,10 +169,34 @@ export function registerIpcHandlers(service: PosService): void {
   // ── Expense ──────────────────────────────
 
   ipcMain.handle(
-    IPC_CHANNELS.ADD_EXPENSE,
-    async (_event, data: AddExpenseInput) => {
+    IPC_CHANNELS.CREATE_EXPENSE,
+    async (_event, amount: number, category: string, description: string) => {
       try {
-        const expense = await service.addExpense(data);
+        const expense = await service.createExpense(amount, category, description);
+        return ok(expense);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.GET_DAILY_EXPENSES,
+    async (_event, dateStr: string) => {
+      try {
+        const expenses = await service.getDailyExpenses(dateStr);
+        return ok(expenses);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.DELETE_EXPENSE,
+    async (_event, id: string) => {
+      try {
+        const expense = await service.deleteExpense(id);
         return ok(expense);
       } catch (err) {
         return fail(err);

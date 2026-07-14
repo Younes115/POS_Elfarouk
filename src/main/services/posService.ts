@@ -14,7 +14,6 @@ import type {
   OrderRecord,
   OrderWithItemsRecord,
   OrderItemRecord,
-  AddExpenseInput,
   ExpenseRecord,
   DailySummary,
 } from '../types.js';
@@ -41,6 +40,25 @@ function dayBounds(dateStr: string): { start: Date; end: Date } {
   end.setHours(23, 59, 59, 999);
 
   return { start, end };
+}
+
+function toExpenseRecord(
+  expense: {
+    id: string;
+    description: string;
+    amount: number;
+    createdAt: Date;
+    category?: string;
+  },
+  fallbackCategory = '',
+): ExpenseRecord {
+  return {
+    id: expense.id,
+    category: expense.category ?? fallbackCategory,
+    description: expense.description,
+    amount: expense.amount,
+    createdAt: serialiseDate(expense.createdAt),
+  };
 }
 
 // ── Service Factory ──────────────────────────
@@ -439,18 +457,73 @@ export function createPosService(prisma: PrismaClient) {
 
   // ── Expense ────────────────────────────────
 
-  async function addExpense(data: AddExpenseInput): Promise<ExpenseRecord> {
+  /**
+   * Create a new expense with strict input validation.
+   * Throws if amount ≤ 0 or category/description are empty.
+   */
+  async function createExpense(
+    amount: number,
+    category: string,
+    description: string,
+  ): Promise<ExpenseRecord> {
+    if (amount <= 0) {
+      throw new Error('Expense amount must be greater than 0.');
+    }
+    if (!category || category.trim() === '') {
+      throw new Error('Expense category is required.');
+    }
+    if (!description || description.trim() === '') {
+      throw new Error('Expense description is required.');
+    }
+
     const expense = await prisma.expense.create({
       data: {
-        description: data.description,
-        amount: data.amount,
+        category: category.trim(),
+        description: description.trim(),
+        amount,
       },
     });
 
-    return {
-      ...expense,
-      createdAt: serialiseDate(expense.createdAt),
-    };
+    return toExpenseRecord(expense, category.trim());
+  }
+
+  async function addExpense(input: {
+    amount: number;
+    description: string;
+    category?: string;
+  }): Promise<ExpenseRecord> {
+    return createExpense(
+      input.amount,
+      input.category ?? 'GENERAL',
+      input.description,
+    );
+  }
+
+  /**
+   * Fetch all expenses for a specific calendar day.
+   * Uses exact local-timezone boundaries to prevent
+   * time-zone bleeding across days.
+   */
+  async function getDailyExpenses(dateStr: string): Promise<ExpenseRecord[]> {
+    const { start, end } = dayBounds(dateStr);
+
+    const expenses = await prisma.expense.findMany({
+      where: {
+        createdAt: { gte: start, lte: end },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return expenses.map((expense) => toExpenseRecord(expense));
+  }
+
+  /**
+   * Delete an expense by ID.
+   * Throws if the expense does not exist (Prisma default).
+   */
+  async function deleteExpense(id: string): Promise<ExpenseRecord> {
+    const expense = await prisma.expense.delete({ where: { id } });
+    return toExpenseRecord(expense);
   }
 
   // ── Daily Summary ──────────────────────────
@@ -519,7 +592,10 @@ export function createPosService(prisma: PrismaClient) {
     getOrderByReceipt,
     refundItem,
     exchangeItem,
+    createExpense,
     addExpense,
+    getDailyExpenses,
+    deleteExpense,
     getDailySummary,
   } as const;
 }

@@ -88,12 +88,14 @@ export interface OrderWithItemsRecord {
 // ── Expense ──────────────────────────────────
 
 export interface AddExpenseInput {
+  category: string;
   description: string;
   amount: number;
 }
 
 export interface ExpenseRecord {
   id: string;
+  category: string;
   description: string;
   amount: number;
   createdAt: string;

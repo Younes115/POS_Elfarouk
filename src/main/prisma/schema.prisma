@@ -81,6 +81,7 @@ model OrderItem {
 // ─────────────────────────────────────────────
 model Expense {
   id          String   @id @default(uuid())
+  category    String
   description String
   amount      Float
   createdAt   DateTime @default(now())
