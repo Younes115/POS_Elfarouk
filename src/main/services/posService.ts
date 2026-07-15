@@ -16,6 +16,10 @@ import type {
   OrderItemRecord,
   ExpenseRecord,
   DailySummary,
+  DailyReport,
+  MonthlyReport,
+  DailySalesTrend,
+  TopSellingProduct,
 } from '../types.js';
 
 // ── Helpers ──────────────────────────────────
@@ -39,6 +43,18 @@ function dayBounds(dateStr: string): { start: Date; end: Date } {
   const end = new Date(dateStr);
   end.setHours(23, 59, 59, 999);
 
+  return { start, end };
+}
+
+/**
+ * Return the start-of-month and end-of-month Date boundaries
+ * for a given year and month (1-indexed), in the local timezone.
+ */
+function monthBounds(year: number, month: number): { start: Date; end: Date } {
+  const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
+  // Day 0 of the *next* month = last day of *this* month
+  const lastDay = new Date(year, month, 0).getDate();
+  const end = new Date(year, month - 1, lastDay, 23, 59, 59, 999);
   return { start, end };
 }
 
@@ -578,6 +594,211 @@ export function createPosService(prisma: PrismaClient) {
     };
   }
 
+  // ── Reports (Accounting Engine) ────────────
+
+  /**
+   * Compute financials for a single date range.
+   * This is the core calculation shared by both daily and monthly reports.
+   *
+   *   Gross Sales       = SUM(total) of positive-total Orders
+   *   Total Refunds     = ABS(SUM(total)) of negative-total Orders
+   *   Net Revenue       = Gross Sales − Total Refunds
+   *   Gross COGS        = SUM((quantity − returnedQuantity) × costAtSale) for items in positive orders
+   *   Refunded COGS     = SUM(returnedQuantity × costAtSale) for items in positive orders
+   *   Net COGS          = Gross COGS − Refunded COGS
+   *   Total Expenses    = SUM(amount) of Expenses
+   *   Expected Drawer   = Net Revenue − Total Expenses
+   *   Net Profit        = Net Revenue − Net COGS − Total Expenses
+   */
+  async function computeFinancials(start: Date, end: Date) {
+    const dateFilter = { createdAt: { gte: start, lte: end } };
+
+    // ── Revenue aggregates ─────────────────
+    const [positiveOrdersAgg, negativeOrdersAgg, expenseAgg] =
+      await Promise.all([
+        // Gross Sales: orders with total > 0
+        prisma.order.aggregate({
+          where: { ...dateFilter, total: { gt: 0 } },
+          _sum: { total: true },
+        }),
+        // Total Refunds: orders with total < 0
+        prisma.order.aggregate({
+          where: { ...dateFilter, total: { lt: 0 } },
+          _sum: { total: true },
+        }),
+        // Total Expenses
+        prisma.expense.aggregate({
+          where: dateFilter,
+          _sum: { amount: true },
+        }),
+      ]);
+
+    const grossSales = positiveOrdersAgg._sum.total ?? 0;
+    const totalRefunds = Math.abs(negativeOrdersAgg._sum.total ?? 0);
+    const netRevenue = grossSales - totalRefunds;
+    const totalExpenses = expenseAgg._sum.amount ?? 0;
+
+    // ── COGS calculation ───────────────────
+    // Fetch order items belonging to *positive-total* orders
+    // created within the date range. We compute COGS from
+    // the frozen costAtSale, quantity, and returnedQuantity.
+    const positiveOrderItems = await prisma.orderItem.findMany({
+      where: {
+        order: {
+          ...dateFilter,
+          total: { gt: 0 },
+        },
+      },
+      select: {
+        quantity: true,
+        returnedQuantity: true,
+        costAtSale: true,
+      },
+    });
+
+    let grossCOGS = 0;
+    let refundedCOGS = 0;
+
+    for (const item of positiveOrderItems) {
+      // Gross COGS: full quantity × cost (before returns)
+      grossCOGS += item.quantity * item.costAtSale;
+      // Refunded COGS: returned portion × cost
+      refundedCOGS += item.returnedQuantity * item.costAtSale;
+    }
+
+    const netCOGS = grossCOGS - refundedCOGS;
+
+    return {
+      grossSales,
+      totalRefunds,
+      netRevenue,
+      grossCOGS,
+      refundedCOGS,
+      netCOGS,
+      totalExpenses,
+      expectedDrawerCash: netRevenue - totalExpenses,
+      netProfit: netRevenue - netCOGS - totalExpenses,
+    };
+  }
+
+  /**
+   * Full financial report for a single calendar day.
+   * Returns all revenue, COGS, expenses, and profit metrics
+   * plus the itemised list of expenses.
+   */
+  async function getDailyReport(dateStr: string): Promise<DailyReport> {
+    const { start, end } = dayBounds(dateStr);
+
+    const [financials, expensesList] = await Promise.all([
+      computeFinancials(start, end),
+      getDailyExpenses(dateStr),
+    ]);
+
+    return {
+      date: dateStr,
+      ...financials,
+      expensesList,
+    };
+  }
+
+  /**
+   * Full financial report for an entire calendar month.
+   * Includes aggregate totals, a daily sales trend array
+   * (one entry per day — ideal for charts), and the top 5
+   * best-selling products grouped by Name + Color + Size.
+   */
+  async function getMonthlyReport(
+    year: number,
+    month: number,
+  ): Promise<MonthlyReport> {
+    const { start, end } = monthBounds(year, month);
+
+    // ── Monthly aggregates ─────────────────
+    const financials = await computeFinancials(start, end);
+
+    // ── Daily sales trend ──────────────────
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const dailySalesTrend: DailySalesTrend[] = [];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const { start: dayStart, end: dayEnd } = dayBounds(dayStr);
+      const dayFinancials = await computeFinancials(dayStart, dayEnd);
+
+      dailySalesTrend.push({
+        day,
+        netRevenue: dayFinancials.netRevenue,
+        netProfit: dayFinancials.netProfit,
+      });
+    }
+
+    // ── Top selling products ───────────────
+    // Fetch all order items from positive orders within the month,
+    // including product details for grouping.
+    const soldItems = await prisma.orderItem.findMany({
+      where: {
+        order: {
+          createdAt: { gte: start, lte: end },
+          total: { gt: 0 },
+        },
+      },
+      select: {
+        quantity: true,
+        returnedQuantity: true,
+        product: {
+          select: {
+            name: true,
+            color: true,
+            size: true,
+          },
+        },
+      },
+    });
+
+    // Group by Name + Color + Size and sum net quantities
+    const productMap = new Map<string, TopSellingProduct>();
+
+    for (const item of soldItems) {
+      // Skip items whose product was deleted
+      if (!item.product) continue;
+
+      const key = `${item.product.name}||${item.product.color ?? ''}||${item.product.size ?? ''}`;
+      const existing = productMap.get(key);
+      const netQty = item.quantity - item.returnedQuantity;
+
+      if (existing) {
+        existing.netQuantitySold += netQty;
+      } else {
+        productMap.set(key, {
+          name: item.product.name,
+          color: item.product.color,
+          size: item.product.size,
+          netQuantitySold: netQty,
+        });
+      }
+    }
+
+    const topSellingProducts = [...productMap.values()]
+      .filter((p) => p.netQuantitySold > 0)
+      .sort((a, b) => b.netQuantitySold - a.netQuantitySold)
+      .slice(0, 5);
+
+    return {
+      year,
+      month,
+      monthlyGrossSales: financials.grossSales,
+      monthlyTotalRefunds: financials.totalRefunds,
+      monthlyNetRevenue: financials.netRevenue,
+      monthlyGrossCOGS: financials.grossCOGS,
+      monthlyRefundedCOGS: financials.refundedCOGS,
+      monthlyNetCOGS: financials.netCOGS,
+      monthlyExpenses: financials.totalExpenses,
+      monthlyNetProfit: financials.netProfit,
+      dailySalesTrend,
+      topSellingProducts,
+    };
+  }
+
   // ── Public API ─────────────────────────────
 
   return {
@@ -597,6 +818,8 @@ export function createPosService(prisma: PrismaClient) {
     getDailyExpenses,
     deleteExpense,
     getDailySummary,
+    getDailyReport,
+    getMonthlyReport,
   } as const;
 }
 

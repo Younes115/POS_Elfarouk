@@ -112,3 +112,47 @@ export interface DailySummary {
   orderCount: number;
   returnCount: number;
 }
+
+// ── Reports (Accounting Engine) ──────────────
+
+export interface DailyReport {
+  date: string;
+  grossSales: number;
+  totalRefunds: number;
+  netRevenue: number;
+  grossCOGS: number;
+  refundedCOGS: number;
+  netCOGS: number;
+  totalExpenses: number;
+  expectedDrawerCash: number;
+  netProfit: number;
+  expensesList: ExpenseRecord[];
+}
+
+export interface DailySalesTrend {
+  day: number;
+  netRevenue: number;
+  netProfit: number;
+}
+
+export interface TopSellingProduct {
+  name: string;
+  color: string | null;
+  size: string | null;
+  netQuantitySold: number;
+}
+
+export interface MonthlyReport {
+  year: number;
+  month: number;
+  monthlyGrossSales: number;
+  monthlyTotalRefunds: number;
+  monthlyNetRevenue: number;
+  monthlyGrossCOGS: number;
+  monthlyRefundedCOGS: number;
+  monthlyNetCOGS: number;
+  monthlyExpenses: number;
+  monthlyNetProfit: number;
+  dailySalesTrend: DailySalesTrend[];
+  topSellingProducts: TopSellingProduct[];
+}

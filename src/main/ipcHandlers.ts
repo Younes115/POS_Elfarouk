@@ -34,6 +34,8 @@ export const IPC_CHANNELS = {
   GET_DAILY_EXPENSES: 'pos:get-daily-expenses',
   DELETE_EXPENSE: 'pos:delete-expense',
   GET_DAILY_SUMMARY: 'pos:get-daily-summary',
+  GET_DAILY_REPORT: 'pos:get-daily-report',
+  GET_MONTHLY_REPORT: 'pos:get-monthly-report',
 } as const;
 
 // ── Response Envelope ────────────────────────
@@ -212,6 +214,32 @@ export function registerIpcHandlers(service: PosService): void {
       try {
         const summary = await service.getDailySummary(dateStr);
         return ok(summary);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  // ── Reports (Accounting Engine) ──────────
+
+  ipcMain.handle(
+    IPC_CHANNELS.GET_DAILY_REPORT,
+    async (_event, dateStr: string) => {
+      try {
+        const report = await service.getDailyReport(dateStr);
+        return ok(report);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.GET_MONTHLY_REPORT,
+    async (_event, year: number, month: number) => {
+      try {
+        const report = await service.getMonthlyReport(year, month);
+        return ok(report);
       } catch (err) {
         return fail(err);
       }

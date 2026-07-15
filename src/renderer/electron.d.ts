@@ -15,6 +15,8 @@ import type {
   OrderItemRecord,
   ExpenseRecord,
   DailySummary,
+  DailyReport,
+  MonthlyReport,
 } from '../main/types.js';
 
 interface IpcSuccess<T> {
@@ -48,6 +50,8 @@ export interface PosApi {
   getDailyExpenses: (dateStr: string) => Promise<IpcResponse<ExpenseRecord[]>>;
   deleteExpense: (id: string) => Promise<IpcResponse<ExpenseRecord>>;
   getDailySummary: (dateStr: string) => Promise<IpcResponse<DailySummary>>;
+  getDailyReport: (dateStr: string) => Promise<IpcResponse<DailyReport>>;
+  getMonthlyReport: (year: number, month: number) => Promise<IpcResponse<MonthlyReport>>;
 }
 
 declare global {

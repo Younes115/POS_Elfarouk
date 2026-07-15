@@ -23,6 +23,8 @@ const IPC_CHANNELS = {
   GET_DAILY_EXPENSES: 'pos:get-daily-expenses',
   DELETE_EXPENSE: 'pos:delete-expense',
   GET_DAILY_SUMMARY: 'pos:get-daily-summary',
+  GET_DAILY_REPORT: 'pos:get-daily-report',
+  GET_MONTHLY_REPORT: 'pos:get-monthly-report',
 } as const;
 
 contextBridge.exposeInMainWorld('api', {
@@ -75,4 +77,11 @@ contextBridge.exposeInMainWorld('api', {
   // ── Daily Summary ────────────────────────
   getDailySummary: (dateStr: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_DAILY_SUMMARY, dateStr),
+
+  // ── Reports (Accounting Engine) ──────────
+  getDailyReport: (dateStr: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_DAILY_REPORT, dateStr),
+
+  getMonthlyReport: (year: number, month: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_MONTHLY_REPORT, year, month),
 });
