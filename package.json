@@ -2,14 +2,17 @@
   "name": "project",
   "private": true,
   "version": "0.0.0",
-  "type": "module",
+  "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev:web": "vite --config vite.config.web.ts",
+    "build": "npx prisma generate && tsc -b && vite build",
+    "electron:build": "npm run build && electron-builder",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "seed": "tsx src/main/prisma/seed.ts"
+    "seed": "tsx src/main/prisma/seed.ts",
+    "postinstall": "npx prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -49,6 +52,8 @@
     "tsx": "^4.23.0",
     "typescript": "~6.0.2",
     "vite": "^8.1.1",
+    "vite-plugin-electron": "^1.1.0",
+    "vite-plugin-electron-renderer": "^1.0.0",
     "vitest": "^4.1.9",
     "wait-on": "^9.0.10"
   },
@@ -66,5 +71,42 @@
   },
   "prisma": {
     "schema": "src/main/prisma/schema.prisma"
+  },
+  "build": {
+    "appId": "com.elfarouk.pos",
+    "productName": "POS Elfarouk",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "node_modules/@prisma/**/*",
+      "node_modules/.prisma/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "src/main/prisma/dev.db",
+        "to": "prisma/dev.db"
+      },
+      {
+        "from": "node_modules/.prisma/client/query_engine*",
+        "to": "prisma/"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "public/favicon.svg"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

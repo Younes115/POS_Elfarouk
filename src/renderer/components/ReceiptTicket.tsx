@@ -1,110 +1,181 @@
 import React from 'react';
+import Barcode from 'react-barcode';
 import type { CartItem } from '@/store/useCartStore';
 
-interface ReceiptTicketProps {
+export interface ReceiptTicketProps {
+  storeName?: string;
   receiptNumber: string;
   items: CartItem[];
   subTotal: number;
   discount: number;
   total: number;
   date: string;
+  footerMessage?: string;
 }
 
 const ReceiptTicket = React.forwardRef<HTMLDivElement, ReceiptTicketProps>(
-  ({ receiptNumber, items, subTotal, discount, total, date }, ref) => {
+  (
+    {
+      storeName = 'الفاروق',
+      receiptNumber,
+      items,
+      subTotal,
+      discount,
+      total,
+      date,
+      footerMessage = 'شكراً لزيارتكم',
+    },
+    ref
+  ) => {
     const fmt = (n: number) =>
-      new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+      new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(n);
 
     return (
       <div
         ref={ref}
+        id="receipt-ticket"
+        dir="rtl"
+        className="receipt-ticket mx-auto max-w-[80mm] bg-white p-4 text-black text-sm"
         style={{
-          width: '80mm',
-          padding: '8mm 4mm',
-          fontFamily: "'Courier New', Courier, monospace",
-          fontSize: '12px',
-          lineHeight: 1.5,
-          color: '#000',
-          background: '#fff',
+          fontFamily: "'Courier New', 'Tahoma', Courier, monospace",
+          lineHeight: 1.6,
         }}
       >
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-          <div style={{ fontSize: '16px', fontWeight: 700 }}>EL FAROUK</div>
-          <div style={{ fontSize: '10px', marginTop: '2px' }}>POS Receipt</div>
+        {/* ── Store Header ── */}
+        <div className="text-center mb-2">
+          <h1
+            className="text-xl font-extrabold tracking-wide"
+            style={{ fontFamily: "'Tahoma', 'Arial', sans-serif" }}
+          >
+            {storeName}
+          </h1>
+          <p className="text-[10px] text-gray-500 mt-0.5">EL FAROUK — POS</p>
         </div>
 
-        <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
+        {/* ── Dashed Separator ── */}
+        <div className="border-b-2 border-dashed border-black my-2" />
 
-        {/* Receipt info */}
-        <div style={{ fontSize: '10px', marginBottom: '6px' }}>
-          <div>Receipt: {receiptNumber}</div>
-          <div>Date: {date}</div>
+        {/* ── Receipt Info ── */}
+        <div className="text-[11px] mb-1 space-y-0.5">
+          <div className="flex justify-between">
+            <span className="font-bold">رقم الإيصال:</span>
+            <span className="font-mono text-[10px] ltr" dir="ltr">
+              {receiptNumber}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="font-bold">التاريخ:</span>
+            <span className="font-mono text-[10px] ltr" dir="ltr">
+              {date}
+            </span>
+          </div>
         </div>
 
-        <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
+        {/* ── Dashed Separator ── */}
+        <div className="border-b-2 border-dashed border-black my-2" />
 
-        {/* Items */}
-        <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
+        {/* ── Items Table ── */}
+        <table className="w-full text-[11px] border-collapse">
           <thead>
-            <tr>
-              <th style={{ textAlign: 'left', paddingBottom: '4px', fontWeight: 700 }}>Item</th>
-              <th style={{ textAlign: 'center', paddingBottom: '4px', fontWeight: 700, width: '30px' }}>Qty</th>
-              <th style={{ textAlign: 'right', paddingBottom: '4px', fontWeight: 700, width: '60px' }}>Price</th>
-              <th style={{ textAlign: 'right', paddingBottom: '4px', fontWeight: 700, width: '65px' }}>Total</th>
+            <tr className="border-b border-gray-400">
+              <th className="text-right pb-1 font-bold">المنتج</th>
+              <th className="text-center pb-1 font-bold w-[30px]">الكمية</th>
+              <th className="text-center pb-1 font-bold w-[55px]">السعر</th>
+              <th className="text-left pb-1 font-bold w-[60px]">الإجمالي</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
-              <tr key={item.product.id}>
-                <td style={{ paddingBottom: '3px', fontSize: '10px' }}>
-                  {item.product.name}
-                  {item.product.size ? ` (${item.product.size})` : ''}
-                </td>
-                <td style={{ textAlign: 'center', paddingBottom: '3px' }}>{item.quantity}</td>
-                <td style={{ textAlign: 'right', paddingBottom: '3px' }}>{fmt(item.product.sellingPrice)}</td>
-                <td style={{ textAlign: 'right', paddingBottom: '3px' }}>
-                  {fmt(item.product.sellingPrice * item.quantity)}
-                </td>
-              </tr>
-            ))}
+            {items.map((item) => {
+              const lineTotal = item.product.sellingPrice * item.quantity;
+              return (
+                <tr key={item.product.id} className="border-b border-gray-200">
+                  <td className="py-1 text-[10px] leading-tight">
+                    {item.product.name}
+                    {item.product.size && (
+                      <span className="text-gray-500"> ({item.product.size})</span>
+                    )}
+                    {item.product.color && (
+                      <span className="text-gray-500 block text-[9px]">
+                        {item.product.color}
+                      </span>
+                    )}
+                  </td>
+                  <td className="text-center py-1 font-mono">{item.quantity}</td>
+                  <td className="text-center py-1 font-mono text-[10px]">
+                    {fmt(item.product.sellingPrice)}
+                  </td>
+                  <td className="text-left py-1 font-mono text-[10px] font-semibold">
+                    {fmt(lineTotal)}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
-        <div style={{ borderTop: '1px dashed #000', margin: '6px 0' }} />
+        {/* ── Dashed Separator ── */}
+        <div className="border-b-2 border-dashed border-black my-2" />
 
-        {/* Totals */}
-        <div style={{ fontSize: '11px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span>Subtotal:</span>
-            <span>{fmt(subTotal)} EGP</span>
+        {/* ── Totals Section ── */}
+        <div className="text-[11px] space-y-1">
+          {/* Subtotal */}
+          <div className="flex justify-between">
+            <span>المجموع الفرعي:</span>
+            <span className="font-mono">{fmt(subTotal)} ج.م</span>
           </div>
+
+          {/* Discount */}
           {discount > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span>Discount:</span>
-              <span>-{fmt(discount)} EGP</span>
+            <div className="flex justify-between text-red-600">
+              <span>الخصم:</span>
+              <span className="font-mono">-{fmt(discount)} ج.م</span>
             </div>
           )}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              fontWeight: 700,
-              fontSize: '14px',
-              marginTop: '4px',
-            }}
-          >
-            <span>TOTAL:</span>
-            <span>{fmt(total)} EGP</span>
+
+          {/* Dashed before grand total */}
+          <div className="border-b border-dashed border-gray-400 my-1" />
+
+          {/* Grand Total */}
+          <div className="flex justify-between items-baseline font-bold text-sm">
+            <span className="text-[13px]">الإجمالي النهائي:</span>
+            <span className="font-mono text-base">{fmt(total)} ج.م</span>
           </div>
         </div>
 
-        <div style={{ borderTop: '1px dashed #000', margin: '8px 0' }} />
+        {/* ── Dashed Separator ── */}
+        <div className="border-b-2 border-dashed border-black my-3" />
 
-        {/* Footer */}
-        <div style={{ textAlign: 'center', fontSize: '10px' }}>
-          <div>Thank you for your purchase!</div>
-          <div style={{ marginTop: '2px', opacity: 0.6 }}>No refunds without receipt</div>
+        {/* ── Barcode ── */}
+        <div className="flex justify-center my-2" dir="ltr">
+          <Barcode
+            value={receiptNumber}
+            width={1.2}
+            height={40}
+            fontSize={10}
+            margin={0}
+            displayValue={true}
+            background="#ffffff"
+            lineColor="#000000"
+          />
+        </div>
+
+        {/* ── Dashed Separator ── */}
+        <div className="border-b-2 border-dashed border-black my-2" />
+
+        {/* ── Footer ── */}
+        <div className="text-center mt-2 space-y-1">
+          <p
+            className="text-[13px] font-bold"
+            style={{ fontFamily: "'Tahoma', 'Arial', sans-serif" }}
+          >
+            {footerMessage}
+          </p>
+          <p className="text-[9px] text-gray-400">
+            لا يتم قبول المرتجعات بدون الإيصال
+          </p>
         </div>
       </div>
     );

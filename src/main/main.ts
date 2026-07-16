@@ -11,6 +11,15 @@ import { getPrismaClient } from './prisma/client.js';
 import { createPosService } from './services/posService.js';
 import { registerIpcHandlers } from './ipcHandlers.js';
 
+// ── Globals set by vite-plugin-electron ──────
+// VITE_DEV_SERVER_URL is injected automatically
+// when the Vite dev server is running.
+// dist/ and dist-electron/ are the build outputs.
+//
+// NOTE: __dirname is available natively because the output
+// is compiled to CommonJS (.cjs) format by Vite.
+const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL'];
+
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
@@ -25,11 +34,12 @@ function createWindow(): void {
   });
 
   // In dev, Vite serves on localhost. In production, load the built file.
-  if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+  if (VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+    // Production: the renderer is built into dist/
+    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
   }
 
   mainWindow.on('closed', () => {
@@ -37,17 +47,26 @@ function createWindow(): void {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // 1. Boot Prisma
   const prisma = getPrismaClient();
 
-  // 2. Create the service layer
+  // 2. Ensure the database schema is up-to-date
+  //    (no-op if tables already exist)
+  try {
+    await prisma.$connect();
+    console.log('[Main] Prisma connected successfully');
+  } catch (err) {
+    console.error('[Main] Failed to connect to database:', err);
+  }
+
+  // 3. Create the service layer
   const posService = createPosService(prisma);
 
-  // 3. Register all IPC handlers
+  // 4. Register all IPC handlers
   registerIpcHandlers(posService);
 
-  // 4. Open the window
+  // 5. Open the window
   createWindow();
 
   app.on('activate', () => {

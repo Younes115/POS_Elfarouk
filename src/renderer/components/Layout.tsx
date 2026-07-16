@@ -18,7 +18,7 @@ export function Layout() {
       {/* Sidebar */}
       <aside className="w-64 border-r bg-card flex flex-col shrink-0">
         <div className="p-6 border-b">
-          <h1 className="text-2xl font-bold text-primary">POS System</h1>
+          <h1 className="text-2xl font-bold text-primary">كوتشى الفاروق</h1>
         </div>
         <nav className="flex-1 p-4 space-y-2">
           {navItems.map((item) => {
