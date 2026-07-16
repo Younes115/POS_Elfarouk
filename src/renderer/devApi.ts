@@ -308,6 +308,76 @@ const mockApi: PosApi = {
     }
     return { success: false, error: 'Order item not found' };
   },
+
+  getDailyReport: async (dateStr) => {
+    // Simple mock: derive data from mock expenses/orders for the given day
+    const start = new Date(dateStr);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(dateStr);
+    end.setHours(23, 59, 59, 999);
+
+    const dayOrders = mockOrders.filter((o) => {
+      const d = new Date(o.createdAt);
+      return d >= start && d <= end;
+    });
+    const dayExpenses = mockExpenses.filter((e) => {
+      const d = new Date(e.createdAt);
+      return d >= start && d <= end;
+    });
+
+    const grossSales = dayOrders
+      .filter((o) => o.total > 0)
+      .reduce((s, o) => s + o.total, 0);
+    const totalRefunds = Math.abs(
+      dayOrders.filter((o) => o.total < 0).reduce((s, o) => s + o.total, 0),
+    );
+    const totalExpensesAmt = dayExpenses.reduce((s, e) => s + e.amount, 0);
+    const netRevenue = grossSales - totalRefunds;
+
+    return {
+      success: true,
+      data: {
+        date: dateStr,
+        grossSales,
+        totalRefunds,
+        netRevenue,
+        grossCOGS: 0,
+        refundedCOGS: 0,
+        netCOGS: 0,
+        totalExpenses: totalExpensesAmt,
+        expectedDrawerCash: netRevenue - totalExpensesAmt,
+        netProfit: netRevenue - totalExpensesAmt,
+        expensesList: dayExpenses,
+      },
+    };
+  },
+
+  getMonthlyReport: async (year, month) => {
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const dailySalesTrend = Array.from({ length: daysInMonth }, (_, i) => ({
+      day: i + 1,
+      netRevenue: 0,
+      netProfit: 0,
+    }));
+
+    return {
+      success: true,
+      data: {
+        year,
+        month,
+        monthlyGrossSales: 0,
+        monthlyTotalRefunds: 0,
+        monthlyNetRevenue: 0,
+        monthlyGrossCOGS: 0,
+        monthlyRefundedCOGS: 0,
+        monthlyNetCOGS: 0,
+        monthlyExpenses: 0,
+        monthlyNetProfit: 0,
+        dailySalesTrend,
+        topSellingProducts: [],
+      },
+    };
+  },
 };
 
 /**

@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { ShoppingCart, Package, RotateCcw, Receipt } from 'lucide-react';
+import { ShoppingCart, Package, RotateCcw, Receipt, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export function Layout() {
@@ -10,6 +10,7 @@ export function Layout() {
     { name: 'Inventory', path: '/inventory', icon: Package },
     { name: 'Returns', path: '/returns', icon: RotateCcw },
     { name: 'Expenses', path: '/expenses', icon: Receipt },
+    { name: 'Reports', path: '/reports', icon: BarChart3 },
   ];
 
   return (

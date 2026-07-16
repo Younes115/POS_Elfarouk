@@ -4,6 +4,7 @@ import Cashier from './pages/Cashier';
 import Inventory from './pages/Inventory';
 import Expenses from './pages/Expenses';
 import Returns from './pages/Returns';
+import Reports from './pages/Reports';
 
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
           <Route path="inventory" element={<Inventory />} />
           <Route path="returns" element={<Returns />} />
           <Route path="expenses" element={<Expenses />} />
+          <Route path="reports" element={<Reports />} />
         </Route>
       </Routes>
     </HashRouter>
