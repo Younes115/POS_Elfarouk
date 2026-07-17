@@ -12,7 +12,7 @@ import {
   Coins,
   TrendingUp,
   TrendingDown,
-  Loader2,
+
   CalendarDays,
   BarChart3,
   Trophy,
@@ -20,13 +20,6 @@ import {
   PackageOpen,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -136,20 +129,6 @@ function KpiSkeleton() {
         <SkeletonPulse className="h-9 w-9 rounded-lg" />
       </div>
       <SkeletonPulse className="h-8 w-32 mt-1" />
-    </div>
-  );
-}
-
-function TableSkeleton({ rows = 4 }: { rows?: number }) {
-  return (
-    <div className="p-4 space-y-3">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="flex gap-4">
-          <SkeletonPulse className="h-5 flex-1" />
-          <SkeletonPulse className="h-5 w-28" />
-          <SkeletonPulse className="h-5 w-20" />
-        </div>
-      ))}
     </div>
   );
 }
@@ -436,12 +415,17 @@ function DailyReportTab() {
 // ══════════════════════════════════════════════
 
 function MonthlyReportTab() {
+  // Default to current month in YYYY-MM format
   const now = new Date();
-  const [selectedMonth, setSelectedMonth] = useState(String(now.getMonth() + 1));
-  const [selectedYear, setSelectedYear] = useState(String(now.getFullYear()));
+  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const [selectedMonthStr, setSelectedMonthStr] = useState(currentMonthStr);
   const [report, setReport] = useState<MonthlyReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Parse YYYY-MM → { year, month }
+  const parsedYear = Number(selectedMonthStr.split('-')[0]);
+  const parsedMonth = Number(selectedMonthStr.split('-')[1]);
 
   const fetchReport = useCallback(
     async (year: number, month: number) => {
@@ -467,14 +451,16 @@ function MonthlyReportTab() {
   );
 
   useEffect(() => {
-    fetchReport(Number(selectedYear), Number(selectedMonth));
-  }, [selectedMonth, selectedYear, fetchReport]);
+    fetchReport(parsedYear, parsedMonth);
+  }, [parsedYear, parsedMonth, fetchReport]);
 
   const profitIsPositive = (report?.monthlyNetProfit ?? 0) >= 0;
 
-  // Build year options: current year ± 2
-  const currentYear = now.getFullYear();
-  const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+  const handleMonthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.value) {
+      setSelectedMonthStr(e.target.value);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -483,47 +469,21 @@ function MonthlyReportTab() {
         <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
           <BarChart3 className="h-4.5 w-4.5 text-primary" />
         </div>
-        <label className="text-sm font-semibold text-foreground whitespace-nowrap">
+        <label
+          htmlFor="monthly-report-month"
+          className="text-sm font-semibold text-foreground whitespace-nowrap"
+        >
           اختر الفترة
         </label>
 
-        <Select
-          value={selectedMonth}
-          onValueChange={setSelectedMonth}
-          dir="rtl"
-        >
-          <SelectTrigger className="w-[160px] bg-background" id="monthly-report-month">
-            <SelectValue placeholder="الشهر" />
-          </SelectTrigger>
-          <SelectContent>
-            {MONTH_NAMES.map((name, idx) => (
-              <SelectItem
-                key={idx + 1}
-                value={String(idx + 1)}
-                className="text-right"
-              >
-                {name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={selectedYear}
-          onValueChange={setSelectedYear}
-          dir="rtl"
-        >
-          <SelectTrigger className="w-[120px] bg-background" id="monthly-report-year">
-            <SelectValue placeholder="السنة" />
-          </SelectTrigger>
-          <SelectContent>
-            {years.map((y) => (
-              <SelectItem key={y} value={String(y)} className="text-right">
-                {y}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <input
+          id="monthly-report-month"
+          type="month"
+          value={selectedMonthStr}
+          onChange={handleMonthChange}
+          className="h-10 w-full max-w-[220px] rounded-md border border-input bg-background px-3 py-2 text-sm font-mono ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          dir="ltr"
+        />
       </div>
 
       {/* ── KPI Cards ────────────────────────── */}
@@ -704,7 +664,7 @@ function MonthlyReportTab() {
                     </TableHeader>
                     <TableBody>
                       {report.dailySalesTrend.map((day) => {
-                        const dayStr = `${day.day} ${MONTH_NAMES[Number(selectedMonth) - 1]}`;
+                        const dayStr = `${day.day} ${MONTH_NAMES[parsedMonth - 1]}`;
                         const hasActivity =
                           day.netRevenue !== 0 || day.netProfit !== 0;
                         return (

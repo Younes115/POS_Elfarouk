@@ -13,7 +13,7 @@ import type {
   CreateOrderItemInput,
   OrderRecord,
   OrderWithItemsRecord,
-  OrderItemRecord,
+
   ExpenseRecord,
   DailySummary,
   DailyReport,
@@ -321,18 +321,23 @@ export function createPosService(prisma: PrismaClient) {
    * Refund (partially or fully) an order item.
    * Uses an interactive transaction to:
    *   1. Verify quantity bounds.
-   *   2. Increment returnedQuantity.
+   *   2. Increment returnedQuantity on the original OrderItem.
    *   3. Restore the product stock by qtyToReturn.
+   *   4. CREATE a new adjustment Order dated TODAY with a negative
+   *      total so it appears in today's daily report.
+   *
+   * This "double-entry" approach keeps the original order immutable
+   * and records the financial deduction under today's date.
    */
   async function refundItem(
     orderItemId: string,
     qtyToReturn: number,
-  ): Promise<OrderItemRecord> {
+  ): Promise<OrderRecord> {
     return prisma.$transaction(async (tx) => {
-      // 1. Fetch the order item
+      // 1. Fetch the original order item + its parent order
       const orderItem = await tx.orderItem.findUnique({
         where: { id: orderItemId },
-        include: { product: true },
+        include: { product: true, order: true },
       });
 
       if (!orderItem) {
@@ -353,8 +358,8 @@ export function createPosService(prisma: PrismaClient) {
         throw new Error('Cannot refund: product has been deleted from catalog.');
       }
 
-      // 2. Increment returnedQuantity
-      const updated = await tx.orderItem.update({
+      // 2. Increment returnedQuantity on the original item
+      await tx.orderItem.update({
         where: { id: orderItemId },
         data: { returnedQuantity: { increment: qtyToReturn } },
       });
@@ -365,9 +370,39 @@ export function createPosService(prisma: PrismaClient) {
         data: { stock: { increment: qtyToReturn } },
       });
 
+      // 4. Create a NEW adjustment Order dated TODAY
+      const refundTotal = -(qtyToReturn * orderItem.priceAtSale);
+      const refundReceipt = `RET-${orderItem.order.receiptNumber}-${Date.now()}`;
+
+      const adjustmentOrder = await tx.order.create({
+        data: {
+          receiptNumber: refundReceipt,
+          subTotal: refundTotal,
+          discountValue: 0,
+          offerName: null,
+          total: refundTotal,
+          type: 'RETURN',
+          createdAt: new Date(),
+          items: {
+            create: {
+              productId: orderItem.productId,
+              quantity: -qtyToReturn,
+              costAtSale: orderItem.costAtSale,
+              priceAtSale: orderItem.priceAtSale,
+              returnedQuantity: 0,
+            },
+          },
+        },
+        include: { items: true },
+      });
+
       return {
-        ...updated,
-        returnedQuantity: updated.returnedQuantity,
+        ...adjustmentOrder,
+        createdAt: serialiseDate(adjustmentOrder.createdAt),
+        items: adjustmentOrder.items.map((item) => ({
+          ...item,
+          returnedQuantity: item.returnedQuantity,
+        })),
       };
     });
   }
@@ -379,18 +414,24 @@ export function createPosService(prisma: PrismaClient) {
    *   2. Verify new product exists and has enough stock.
    *   3. Increment old item's returnedQuantity, restore its stock.
    *   4. Decrement new product stock.
-   *   5. Create a new OrderItem for the exchanged quantity.
+   *   5. CREATE a new adjustment Order dated TODAY with:
+   *      - A negative OrderItem for the returned product.
+   *      - A positive OrderItem for the new product.
+   *      - Total = net price difference (can be +, −, or 0).
+   *
+   * This "double-entry" approach keeps the original order immutable
+   * and records the net financial impact under today's date.
    */
   async function exchangeItem(
     orderItemId: string,
     qtyToExchange: number,
     newProductSku: string,
-  ): Promise<OrderItemRecord> {
+  ): Promise<OrderRecord> {
     return prisma.$transaction(async (tx) => {
-      // 1. Fetch old order item
+      // 1. Fetch old order item + its parent order
       const oldItem = await tx.orderItem.findUnique({
         where: { id: orderItemId },
-        include: { product: true },
+        include: { product: true, order: true },
       });
 
       if (!oldItem) {
@@ -427,7 +468,7 @@ export function createPosService(prisma: PrismaClient) {
         );
       }
 
-      // 3. Increment returnedQuantity on old item and restore stock
+      // 3. Increment returnedQuantity on old item and restore old stock
       await tx.orderItem.update({
         where: { id: orderItemId },
         data: { returnedQuantity: { increment: qtyToExchange } },
@@ -444,29 +485,55 @@ export function createPosService(prisma: PrismaClient) {
         data: { stock: { decrement: qtyToExchange } },
       });
 
-      // 5. Create replacement OrderItem with new product's current prices
-      const newOrderItem = await tx.orderItem.create({
+      // 5. Create a NEW adjustment Order dated TODAY
+      //    total = (value of new items) − (value of returned items)
+      const returnedValue = qtyToExchange * oldItem.priceAtSale;
+      const newValue = qtyToExchange * newProduct.sellingPrice;
+      const netDifference = newValue - returnedValue;
+
+      const exchangeReceipt = `EXC-${oldItem.order.receiptNumber}-${Date.now()}`;
+      const orderType = netDifference >= 0 ? 'SALE' : 'RETURN';
+
+      const adjustmentOrder = await tx.order.create({
         data: {
-          orderId: oldItem.orderId,
-          productId: newProduct.id,
-          quantity: qtyToExchange,
-          costAtSale: newProduct.costPrice,
-          priceAtSale: newProduct.sellingPrice,
-          returnedQuantity: 0,
+          receiptNumber: exchangeReceipt,
+          subTotal: netDifference,
+          discountValue: 0,
+          offerName: null,
+          total: netDifference,
+          type: orderType,
+          createdAt: new Date(),
+          items: {
+            create: [
+              // Negative line: the returned product
+              {
+                productId: oldItem.productId,
+                quantity: -qtyToExchange,
+                costAtSale: oldItem.costAtSale,
+                priceAtSale: oldItem.priceAtSale,
+                returnedQuantity: 0,
+              },
+              // Positive line: the new product
+              {
+                productId: newProduct.id,
+                quantity: qtyToExchange,
+                costAtSale: newProduct.costPrice,
+                priceAtSale: newProduct.sellingPrice,
+                returnedQuantity: 0,
+              },
+            ],
+          },
         },
-        include: { product: true },
+        include: { items: true },
       });
 
       return {
-        ...newOrderItem,
-        returnedQuantity: newOrderItem.returnedQuantity,
-        product: newOrderItem.product
-          ? {
-              ...newOrderItem.product,
-              createdAt: serialiseDate(newOrderItem.product.createdAt),
-              updatedAt: serialiseDate(newOrderItem.product.updatedAt),
-            }
-          : null,
+        ...adjustmentOrder,
+        createdAt: serialiseDate(adjustmentOrder.createdAt),
+        items: adjustmentOrder.items.map((item) => ({
+          ...item,
+          returnedQuantity: item.returnedQuantity,
+        })),
       };
     });
   }
@@ -603,8 +670,8 @@ export function createPosService(prisma: PrismaClient) {
    *   Gross Sales       = SUM(total) of positive-total Orders
    *   Total Refunds     = ABS(SUM(total)) of negative-total Orders
    *   Net Revenue       = Gross Sales − Total Refunds
-   *   Gross COGS        = SUM((quantity − returnedQuantity) × costAtSale) for items in positive orders
-   *   Refunded COGS     = SUM(returnedQuantity × costAtSale) for items in positive orders
+   *   Gross COGS        = SUM(quantity × costAtSale) for positive-quantity items
+   *   Refunded COGS     = ABS(SUM(quantity × costAtSale)) for negative-quantity items
    *   Net COGS          = Gross COGS − Refunded COGS
    *   Total Expenses    = SUM(amount) of Expenses
    *   Expected Drawer   = Net Revenue − Total Expenses
@@ -639,19 +706,20 @@ export function createPosService(prisma: PrismaClient) {
     const totalExpenses = expenseAgg._sum.amount ?? 0;
 
     // ── COGS calculation ───────────────────
-    // Fetch order items belonging to *positive-total* orders
-    // created within the date range. We compute COGS from
-    // the frozen costAtSale, quantity, and returnedQuantity.
-    const positiveOrderItems = await prisma.orderItem.findMany({
+    // Fetch ALL order items from orders created within the date
+    // range. With the double-entry model:
+    //   - Positive-quantity items (from SALE orders) → grossCOGS
+    //   - Negative-quantity items (from RETURN/adjustment orders) → refundedCOGS
+    // This correctly captures cost recovery from refunds and
+    // the net cost impact of exchanges.
+    const allOrderItems = await prisma.orderItem.findMany({
       where: {
         order: {
           ...dateFilter,
-          total: { gt: 0 },
         },
       },
       select: {
         quantity: true,
-        returnedQuantity: true,
         costAtSale: true,
       },
     });
@@ -659,11 +727,15 @@ export function createPosService(prisma: PrismaClient) {
     let grossCOGS = 0;
     let refundedCOGS = 0;
 
-    for (const item of positiveOrderItems) {
-      // Gross COGS: full quantity × cost (before returns)
-      grossCOGS += item.quantity * item.costAtSale;
-      // Refunded COGS: returned portion × cost
-      refundedCOGS += item.returnedQuantity * item.costAtSale;
+    for (const item of allOrderItems) {
+      const costContribution = item.quantity * item.costAtSale;
+      if (costContribution >= 0) {
+        // Positive quantity: goods sold → adds to COGS
+        grossCOGS += costContribution;
+      } else {
+        // Negative quantity: goods returned → recovers COGS
+        refundedCOGS += Math.abs(costContribution);
+      }
     }
 
     const netCOGS = grossCOGS - refundedCOGS;
@@ -733,18 +805,18 @@ export function createPosService(prisma: PrismaClient) {
     }
 
     // ── Top selling products ───────────────
-    // Fetch all order items from positive orders within the month,
-    // including product details for grouping.
+    // Fetch ALL order items within the month (including items
+    // from adjustment orders) to compute net quantities sold.
+    // Positive-qty items add to the count, negative-qty items
+    // (from refund/exchange adjustments) subtract from it.
     const soldItems = await prisma.orderItem.findMany({
       where: {
         order: {
           createdAt: { gte: start, lte: end },
-          total: { gt: 0 },
         },
       },
       select: {
         quantity: true,
-        returnedQuantity: true,
         product: {
           select: {
             name: true,
@@ -764,16 +836,15 @@ export function createPosService(prisma: PrismaClient) {
 
       const key = `${item.product.name}||${item.product.color ?? ''}||${item.product.size ?? ''}`;
       const existing = productMap.get(key);
-      const netQty = item.quantity - item.returnedQuantity;
 
       if (existing) {
-        existing.netQuantitySold += netQty;
+        existing.netQuantitySold += item.quantity;
       } else {
         productMap.set(key, {
           name: item.product.name,
           color: item.product.color,
           size: item.product.size,
-          netQuantitySold: netQty,
+          netQuantitySold: item.quantity,
         });
       }
     }

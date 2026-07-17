@@ -1,5 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
-import { useReactToPrint } from 'react-to-print';
+import { useState, useRef } from 'react';
 import ExchangeReceiptTicket from '@/components/ExchangeReceiptTicket';
 import type { ExchangeReceiptTicketProps } from '@/components/ExchangeReceiptTicket';
 import {
@@ -157,30 +156,14 @@ export default function Returns() {
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [exchangeSkuError, setExchangeSkuError] = useState<string | null>(null);
   const [isExchanging, setIsExchanging] = useState(false);
+  const [exchangeReceiptData, setExchangeReceiptData] = useState<ExchangeReceiptTicketProps | null>(null);
+  const [showExchangeReceipt, setShowExchangeReceipt] = useState(false);
 
   // ── Toast state ─────────────────────────────
   const [toast, setToast] = useState<ToastData | null>(null);
 
-  // ── Print state ─────────────────────────────
-  const [exchangeReceiptData, setExchangeReceiptData] = useState<ExchangeReceiptTicketProps | null>(null);
-  const receiptRef = useRef<HTMLDivElement>(null);
 
-  const triggerPrint = useReactToPrint({
-    contentRef: receiptRef,
-    documentTitle: 'Exchange Receipt',
-    onAfterPrint: () => setExchangeReceiptData(null),
-  });
 
-  useEffect(() => {
-    if (exchangeReceiptData && receiptRef.current) {
-      try {
-        triggerPrint();
-      } catch (err) {
-        console.warn('[Print] Receipt print failed:', err);
-        setExchangeReceiptData(null);
-      }
-    }
-  }, [exchangeReceiptData, triggerPrint]);
 
   function showToast(message: string, type: 'success' | 'error') {
     setToast({ message, type });
@@ -339,6 +322,7 @@ export default function Returns() {
           },
           netDifference: diff * exchangeQty,
         });
+        setShowExchangeReceipt(true);
 
         await refreshOrder();
       }
@@ -885,15 +869,33 @@ export default function Returns() {
       {/* ═══════════ Toast Notification ═══════════ */}
       {toast && <Toast data={toast} onClose={() => setToast(null)} />}
 
-      {/* ═══════════ Hidden Receipt (for printing) ═══════════ */}
-      {exchangeReceiptData && (
-        <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
-          <ExchangeReceiptTicket
-            ref={receiptRef}
-            {...exchangeReceiptData}
-          />
-        </div>
-      )}
+      {/* ═══════════ Exchange Receipt Preview Dialog ═══════════ */}
+      <Dialog open={showExchangeReceipt} onOpenChange={(open) => {
+        if (!open) {
+          setShowExchangeReceipt(false);
+          setExchangeReceiptData(null);
+        }
+      }}>
+        <DialogContent className="max-w-[420px] max-h-[90vh] overflow-y-auto p-0">
+          <DialogHeader className="p-4 pb-0">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Receipt className="h-5 w-5" />
+              معاينة فاتورة الاستبدال
+            </DialogTitle>
+            <DialogDescription>
+              تأكد من بيانات الفاتورة قبل الطباعة
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="px-4 py-2">
+            <div className="border border-gray-200 rounded-lg shadow-inner bg-gray-50 p-2 flex justify-center">
+              {exchangeReceiptData && (
+                <ExchangeReceiptTicket {...exchangeReceiptData} />
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

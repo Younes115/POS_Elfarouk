@@ -1,6 +1,5 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Package, Plus, AlertTriangle, Trash2, Printer, Copy, Check, Pencil } from 'lucide-react';
-import { useReactToPrint } from 'react-to-print';
 import BarcodeTicket from '@/components/BarcodeTicket';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,26 +68,12 @@ export default function Inventory() {
   const [editError, setEditError] = useState<string | null>(null);
   const [isEditSubmitting, setIsEditSubmitting] = useState(false);
 
-  // ── Barcode Printing ──────────────────────────
+  // ── Barcode Print Preview ─────────────────────
   const [printProduct, setPrintProduct] = useState<{
     sku: string;
     name: string;
     price: string;
   } | null>(null);
-  const barcodeRef = useRef<HTMLDivElement>(null);
-
-  const handlePrint = useReactToPrint({
-    contentRef: barcodeRef,
-    documentTitle: printProduct ? `Barcode_${printProduct.sku}` : 'Barcode',
-    onAfterPrint: () => setPrintProduct(null),
-  });
-
-  // Trigger print once the ticket has rendered with the selected product
-  useEffect(() => {
-    if (printProduct && barcodeRef.current) {
-      handlePrint();
-    }
-  }, [printProduct, handlePrint]);
 
   const fetchProducts = useCallback(async () => {
     setIsLoading(true);
@@ -467,17 +452,26 @@ export default function Inventory() {
         </DialogContent>
       </Dialog>
 
-      {/* Hidden Barcode Ticket for Printing */}
-      {printProduct && (
-        <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
-          <BarcodeTicket
-            ref={barcodeRef}
-            sku={printProduct.sku}
-            name={printProduct.name}
-            price={printProduct.price}
-          />
-        </div>
-      )}
+      {/* Barcode Print Preview Dialog */}
+      <Dialog open={!!printProduct} onOpenChange={(open) => { if (!open) setPrintProduct(null); }}>
+        <DialogContent className="sm:max-w-[320px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Printer className="h-5 w-5" />
+              معاينة الباركود
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex justify-center py-4">
+            {printProduct && (
+              <BarcodeTicket
+                sku={printProduct.sku}
+                name={printProduct.name}
+                price={printProduct.price}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

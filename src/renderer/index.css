@@ -58,3 +58,100 @@
     color: hsl(var(--foreground));
   }
 }
+
+/* ══════════════ Print-Only Styles ══════════════ */
+
+/*
+ * Three printable targets:
+ *   #receipt-ticket           — 80mm thermal sales receipt  (Cashier)
+ *   #barcode-ticket           — 50×25mm barcode label       (Inventory)
+ *   #exchange-receipt-ticket  — 80mm exchange receipt       (Returns)
+ *
+ * When window.print() is called, ONLY the visible ticket prints.
+ * All UI chrome (sidebar, navbar, buttons, overlays) is hidden.
+ */
+
+@media print {
+
+  /* ── Default page: zero margins ── */
+  @page {
+    margin: 0;
+  }
+
+  /* ── Hide EVERYTHING by default ── */
+  body * {
+    visibility: hidden;
+  }
+
+  /* ── Show the printable tickets and ALL their descendants ── */
+  #receipt-ticket,
+  #receipt-ticket *,
+  #barcode-ticket,
+  #barcode-ticket *,
+  #exchange-receipt-ticket,
+  #exchange-receipt-ticket * {
+    visibility: visible !important;
+  }
+
+  /* ── Shared printable positioning ── */
+  #receipt-ticket,
+  #barcode-ticket,
+  #exchange-receipt-ticket {
+    position: absolute;
+    left: 0;
+    top: 0;
+    margin: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ── Sales Receipt (80mm thermal) ── */
+  #receipt-ticket {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    padding: 4mm !important;
+    font-size: 12px !important;
+  }
+
+  /* ── Exchange Receipt (80mm thermal) ── */
+  #exchange-receipt-ticket {
+    width: 80mm !important;
+    max-width: 80mm !important;
+    padding: 4mm !important;
+    font-size: 12px !important;
+  }
+
+  /* ── Barcode Label (50mm × 25mm) ── */
+  #barcode-ticket {
+    width: 50mm !important;
+    height: 25mm !important;
+    max-width: 50mm !important;
+    max-height: 25mm !important;
+    padding: 1mm 2mm !important;
+    border: none !important;
+  }
+
+  /* ── Neutralize Radix Dialog portal / overlay chrome ── */
+  [data-radix-portal],
+  [role="dialog"],
+  [data-state] {
+    position: static !important;
+    transform: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* ── Hide all action buttons / UI controls ── */
+  .no-print,
+  .receipt-modal-actions {
+    display: none !important;
+  }
+}

@@ -10,7 +10,7 @@ export default defineConfig(({ command }) => {
 
   return {
     plugins: [
-      react(),
+      react({}),
 
       // ── Electron Main + Preload ──────────────
       electron({

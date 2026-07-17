@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ScanBarcode, ShoppingCart, Trash2, Plus, Minus, BadgeCheck, Search } from 'lucide-react';
-import { useReactToPrint } from 'react-to-print';
+import { ScanBarcode, ShoppingCart, Trash2, Plus, Minus, BadgeCheck, Search, Printer, ReceiptText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,6 +10,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { useCartStore } from '@/store/useCartStore';
 import type { CartItem } from '@/store/useCartStore';
 import ReceiptTicket from '@/components/ReceiptTicket';
@@ -42,28 +48,9 @@ export default function Cashier() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
 
-  // ── Receipt printing (decoupled from DB) ───
+  // ── Receipt preview modal state ─────────────
   const [receiptData, setReceiptData] = useState<ReceiptSnapshot | null>(null);
-  const receiptRef = useRef<HTMLDivElement>(null);
-
-  const triggerPrint = useReactToPrint({
-    contentRef: receiptRef,
-    documentTitle: receiptData ? receiptData.receiptNumber : 'Receipt',
-    onAfterPrint: () => setReceiptData(null),
-  });
-
-  // Fire print once receipt has rendered with snapshot data
-  useEffect(() => {
-    if (receiptData && receiptRef.current) {
-      try {
-        triggerPrint();
-      } catch (err) {
-        // Print failed — that's OK, the sale is already saved
-        console.warn('[Print] Receipt print failed (non-critical):', err);
-        setReceiptData(null);
-      }
-    }
-  }, [receiptData, triggerPrint]);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
 
   // ── Cart store ─────────────────────────────
   const cart = useCartStore((s) => s.cart);
@@ -226,7 +213,7 @@ export default function Cashier() {
     }
   };
 
-  // ── Checkout handler (DB-first, print-second) ──
+  // ── Checkout handler (DB-first, modal-second) ──
 
   const handleCheckout = async () => {
     if (cart.length === 0) return;
@@ -276,7 +263,7 @@ export default function Cashier() {
       subTotal,
       discount,
       total: netTotal,
-      date: new Date().toLocaleString('en-EG', {
+      date: new Date().toLocaleString('ar-EG', {
         year: 'numeric', month: '2-digit', day: '2-digit',
         hour: '2-digit', minute: '2-digit',
       }),
@@ -290,18 +277,23 @@ export default function Cashier() {
 
     setTimeout(() => {
       setCheckoutSuccess(false);
-      inputRef.current?.focus();
     }, 2500);
 
-    // ── STEP 4: Trigger print (non-blocking) ──
-    // Setting receiptData renders the hidden ReceiptTicket,
-    // then the useEffect fires triggerPrint() in its own try/catch.
-    // If the printer is offline/out of paper, the sale is already saved.
-    try {
-      setReceiptData(snapshot);
-    } catch (err) {
-      console.warn('[Print] Failed to set receipt data (non-critical):', err);
-    }
+    // ── STEP 4: Show receipt preview modal ──
+    setReceiptData(snapshot);
+    setShowReceiptModal(true);
+  };
+
+  // ── Handle "New Invoice" — close modal, reset ──
+  const handleNewInvoice = () => {
+    setShowReceiptModal(false);
+    setReceiptData(null);
+    inputRef.current?.focus();
+  };
+
+  // ── Handle "Print" — trigger window.print() ──
+  const handlePrint = () => {
+    window.print();
   };
 
   // ── Render ─────────────────────────────────
@@ -619,20 +611,59 @@ export default function Cashier() {
         </div>
       </div>
 
-      {/* ══════════════ Hidden Receipt (for printing) ══════════════ */}
-      {receiptData && (
-        <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
-          <ReceiptTicket
-            ref={receiptRef}
-            receiptNumber={receiptData.receiptNumber}
-            items={receiptData.items}
-            subTotal={receiptData.subTotal}
-            discount={receiptData.discount}
-            total={receiptData.total}
-            date={receiptData.date}
-          />
-        </div>
-      )}
+      {/* ══════════════ Receipt Preview Modal ══════════════ */}
+      <Dialog open={showReceiptModal} onOpenChange={(open) => {
+        if (!open) handleNewInvoice();
+      }}>
+        <DialogContent className="max-w-[420px] max-h-[90vh] overflow-y-auto p-0">
+          <DialogHeader className="p-4 pb-0">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <ReceiptText className="h-5 w-5" />
+              معاينة الإيصال
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              تأكد من بيانات الإيصال قبل الطباعة
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Receipt Preview */}
+          <div className="px-4 py-2">
+            <div className="border border-gray-200 rounded-lg shadow-inner bg-gray-50 p-2">
+              {receiptData && (
+                <ReceiptTicket
+                  receiptNumber={receiptData.receiptNumber}
+                  items={receiptData.items}
+                  subTotal={receiptData.subTotal}
+                  discount={receiptData.discount}
+                  total={receiptData.total}
+                  date={receiptData.date}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="receipt-modal-actions flex gap-3 p-4 pt-2 border-t">
+            <Button
+              id="btn-receipt-print"
+              className="flex-1 h-11 gap-2 font-bold"
+              onClick={handlePrint}
+            >
+              <Printer className="h-4 w-4" />
+              طباعة
+            </Button>
+            <Button
+              id="btn-receipt-new"
+              variant="outline"
+              className="flex-1 h-11 gap-2 font-bold"
+              onClick={handleNewInvoice}
+            >
+              <ReceiptText className="h-4 w-4" />
+              فاتورة جديدة
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
