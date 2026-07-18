@@ -291,9 +291,10 @@ export default function Cashier() {
     inputRef.current?.focus();
   };
 
-  // ── Handle "Print" — trigger window.print() ──
+  // ── Handle "Print" — trigger native browser print dialog ──
   const handlePrint = () => {
     window.print();
+    handleNewInvoice();
   };
 
   // ── Render ─────────────────────────────────

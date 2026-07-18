@@ -298,10 +298,11 @@ export default function Returns() {
       } else {
         showToast(`Exchange completed successfully! (×${exchangeQty})`, 'success');
         
-        // Prepare receipt data
+        // Prepare receipt data — use the NEW exchange receipt number from the backend
         const diff = getPriceDifference();
         setExchangeReceiptData({
-          receiptNumber: order?.receiptNumber || 'N/A',
+          receiptNumber: result.data.receiptNumber,
+          originalReceiptNumber: order?.receiptNumber || 'N/A',
           date: new Date().toLocaleString('en-EG', {
             year: 'numeric', month: '2-digit', day: '2-digit',
             hour: '2-digit', minute: '2-digit',
@@ -311,7 +312,7 @@ export default function Returns() {
             size: exchangeItem.product?.size,
             color: exchangeItem.product?.color,
             quantity: exchangeQty,
-            price: exchangeItem.priceAtSale,
+            price: Math.round(exchangeItem.priceAtSale * (1 - (order?.subTotal ? order.discountValue / order.subTotal : 0))),
           },
           newItem: {
             name: exchangeProduct.name,
@@ -345,8 +346,10 @@ export default function Returns() {
   // ── Price difference calculation ────────────
 
   function getPriceDifference(): number {
-    if (!exchangeItem || !exchangeProduct) return 0;
-    return exchangeProduct.sellingPrice - exchangeItem.priceAtSale;
+    if (!exchangeItem || !exchangeProduct || !order) return 0;
+    const discountRatio = order.subTotal > 0 ? (order.discountValue / order.subTotal) : 0;
+    const effectiveOldPrice = Math.round(exchangeItem.priceAtSale * (1 - discountRatio));
+    return exchangeProduct.sellingPrice - effectiveOldPrice;
   }
 
   // ── Render ─────────────────────────────────
@@ -482,10 +485,15 @@ export default function Returns() {
                 </TableHeader>
                 <TableBody>
                   {order.items.map((item) => {
+                    const isRefundedItem = item.quantity < 0;
+                    const displayQty = Math.abs(item.quantity);
                     const availableQty = getAvailableQty(item);
-                    const isFullyReturned = availableQty === 0;
-                    const isPartiallyReturned = item.returnedQuantity > 0 && !isFullyReturned;
-                    const lineTotal = item.priceAtSale * item.quantity;
+                    const isFullyReturned = isRefundedItem || availableQty === 0;
+                    const isPartiallyReturned = !isRefundedItem && item.returnedQuantity > 0 && !isFullyReturned;
+                    
+                    const discountRatio = order.subTotal > 0 ? (order.discountValue / order.subTotal) : 0;
+                    const effectivePrice = Math.round(item.priceAtSale * (1 - discountRatio));
+                    const lineTotal = effectivePrice * item.quantity;
 
                     return (
                       <TableRow
@@ -508,12 +516,16 @@ export default function Returns() {
 
                         {/* Quantity */}
                         <TableCell className="text-center font-semibold tabular-nums">
-                          ×{item.quantity}
+                          {isRefundedItem ? (
+                            <span className="text-red-500">×{displayQty} (Returned)</span>
+                          ) : (
+                            `×${displayQty}`
+                          )}
                         </TableCell>
 
                         {/* Returned Quantity */}
                         <TableCell className="text-center tabular-nums">
-                          {item.returnedQuantity > 0 ? (
+                          {item.returnedQuantity > 0 && !isRefundedItem ? (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-orange-500/10 text-orange-600 border border-orange-500/20">
                               {item.returnedQuantity} / {item.quantity}
                             </span>
@@ -524,17 +536,32 @@ export default function Returns() {
 
                         {/* Unit price */}
                         <TableCell className="text-right font-medium tabular-nums whitespace-nowrap">
-                          {formatPrice(item.priceAtSale)}
+                          {order.discountValue > 0 ? (
+                            <div className="flex flex-col items-end">
+                              <span className="text-xs text-muted-foreground line-through">
+                                {formatPrice(item.priceAtSale)}
+                              </span>
+                              <span>{formatPrice(effectivePrice)}</span>
+                            </div>
+                          ) : (
+                            formatPrice(effectivePrice)
+                          )}
                         </TableCell>
 
                         {/* Line total */}
                         <TableCell className="text-right font-semibold tabular-nums whitespace-nowrap">
-                          {formatPrice(lineTotal)}
+                          {formatPrice(Math.abs(lineTotal))}
+                          {isRefundedItem && <span className="text-xs text-red-500 ml-1 block">(Refunded)</span>}
                         </TableCell>
 
                         {/* Status */}
                         <TableCell className="text-center">
-                          {isFullyReturned ? (
+                          {isRefundedItem ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-gray-500/10 text-gray-600 border border-gray-500/20">
+                              <PackageCheck className="h-3 w-3" />
+                              تم الاسترجاع بالكامل
+                            </span>
+                          ) : isFullyReturned ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-500/10 text-orange-600 border border-orange-500/20">
                               <PackageCheck className="h-3 w-3" />
                               Fully Returned
@@ -603,8 +630,11 @@ export default function Returns() {
             </DialogDescription>
           </DialogHeader>
 
-          {refundItem && (() => {
+          {refundItem && order && (() => {
             const available = getAvailableQty(refundItem);
+            const discountRatio = order.subTotal > 0 ? (order.discountValue / order.subTotal) : 0;
+            const effectivePrice = Math.round(refundItem.priceAtSale * (1 - discountRatio));
+
             return (
               <div className="space-y-4">
                 <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
@@ -620,8 +650,15 @@ export default function Returns() {
                     </div>
                   )}
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Unit Price</span>
-                    <span className="font-semibold">{formatPrice(refundItem.priceAtSale)}</span>
+                    <span className="text-muted-foreground">Effective Unit Price</span>
+                    <div className="flex flex-col items-end">
+                      {order.discountValue > 0 && (
+                        <span className="text-xs text-muted-foreground line-through">
+                          {formatPrice(refundItem.priceAtSale)}
+                        </span>
+                      )}
+                      <span className="font-semibold">{formatPrice(effectivePrice)}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -642,7 +679,7 @@ export default function Returns() {
                 <div className="border-t pt-3 flex items-center justify-between">
                   <span className="text-sm font-medium text-red-600">Amount to Refund</span>
                   <span className="text-lg font-bold text-red-600 tabular-nums">
-                    {formatPrice(refundItem.priceAtSale * refundQty)}
+                    {formatPrice(effectivePrice * refundQty)}
                   </span>
                 </div>
               </div>
@@ -814,7 +851,7 @@ export default function Returns() {
                                 {totalDiff > 0 ? 'Amount to Collect' : 'Amount to Refund'}
                               </p>
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                ({formatPrice(exchangeProduct.sellingPrice)} − {formatPrice(exchangeItem.priceAtSale)})
+                                ({formatPrice(exchangeProduct.sellingPrice)} − {formatPrice(Math.round(exchangeItem.priceAtSale * (1 - (order?.subTotal ? order.discountValue / order.subTotal : 0))))})
                                 {exchangeQty > 1 && ` × ${exchangeQty}`}
                               </p>
                             </div>

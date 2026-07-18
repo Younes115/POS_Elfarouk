@@ -25,6 +25,7 @@ const IPC_CHANNELS = {
   GET_DAILY_SUMMARY: 'pos:get-daily-summary',
   GET_DAILY_REPORT: 'pos:get-daily-report',
   GET_MONTHLY_REPORT: 'pos:get-monthly-report',
+  PRINT_SILENT: 'pos:print-silent',
 } as const;
 
 contextBridge.exposeInMainWorld('api', {
@@ -84,4 +85,8 @@ contextBridge.exposeInMainWorld('api', {
 
   getMonthlyReport: (year: number, month: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_MONTHLY_REPORT, year, month),
+
+  // ── Print ────────────────────────────────
+  printSilent: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.PRINT_SILENT),
 });

@@ -1,8 +1,10 @@
+import Barcode from 'react-barcode';
 import { Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export interface ExchangeReceiptTicketProps {
   receiptNumber: string;
+  originalReceiptNumber: string;
   date: string;
   oldItem: {
     name: string;
@@ -19,14 +21,17 @@ export interface ExchangeReceiptTicketProps {
     price: number;
   };
   netDifference: number;
+  onPrintComplete?: () => void;
 }
 
 export default function ExchangeReceiptTicket({
   receiptNumber,
+  originalReceiptNumber,
   date,
   oldItem,
   newItem,
   netDifference,
+  onPrintComplete,
 }: ExchangeReceiptTicketProps) {
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', {
@@ -58,7 +63,7 @@ export default function ExchangeReceiptTicket({
             className="text-xl font-extrabold tracking-wide"
             style={{ fontFamily: "'Tahoma', 'Arial', sans-serif" }}
           >
-            الفاروق
+           كوتشى الفاروق
           </div>
           <div className="text-[10px] text-gray-500 mt-0.5">EL FAROUK — POS</div>
         </div>
@@ -76,7 +81,7 @@ export default function ExchangeReceiptTicket({
         {/* ── Receipt Info ── */}
         <div className="text-[11px] mb-1 space-y-0.5">
           <div className="flex justify-between">
-            <span className="font-bold">رقم الإيصال الأصلي:</span>
+            <span className="font-bold">رقم فاتورة الاستبدال:</span>
             <span className="font-mono text-[10px]" dir="ltr">
               {receiptNumber}
             </span>
@@ -85,6 +90,12 @@ export default function ExchangeReceiptTicket({
             <span className="font-bold">التاريخ:</span>
             <span className="font-mono text-[10px]" dir="ltr">
               {date}
+            </span>
+          </div>
+          <div className="flex justify-between text-gray-500">
+            <span className="font-bold">بدل من فاتورة رقم:</span>
+            <span className="font-mono text-[10px]" dir="ltr">
+              {originalReceiptNumber}
             </span>
           </div>
         </div>
@@ -102,9 +113,12 @@ export default function ExchangeReceiptTicket({
             <tbody>
               <tr>
                 <td className="pb-0.5 text-[10px]">
-                  {oldItem.name}
+                  <span className="font-semibold">{oldItem.name}</span>
                   {oldItem.color ? ` (${oldItem.color})` : ''}
                   {oldItem.size ? ` — مقاس: ${oldItem.size}` : ''}
+                  <span className="block text-[9px] text-gray-500 font-bold mt-0.5">
+                    (تم الاسترجاع بالكامل)
+                  </span>
                 </td>
               </tr>
               <tr>
@@ -178,6 +192,23 @@ export default function ExchangeReceiptTicket({
         {/* ── Dashed Separator ── */}
         <div className="border-b-2 border-dashed border-black my-2" />
 
+        {/* ── Barcode ── */}
+        <div className="flex justify-center my-2" dir="ltr">
+          <Barcode
+            value={receiptNumber}
+            width={1.2}
+            height={40}
+            fontSize={10}
+            margin={0}
+            displayValue={true}
+            background="#ffffff"
+            lineColor="#000000"
+          />
+        </div>
+
+        {/* ── Dashed Separator ── */}
+        <div className="border-b-2 border-dashed border-black my-2" />
+
         {/* ── Footer ── */}
         <div className="text-center mt-2 space-y-1">
           <p
@@ -196,7 +227,10 @@ export default function ExchangeReceiptTicket({
       <Button
         id="btn-print-exchange-receipt"
         className="no-print gap-2 px-6 h-10 font-bold"
-        onClick={() => window.print()}
+        onClick={() => {
+          window.print();
+          if (onPrintComplete) onPrintComplete();
+        }}
       >
         <Printer className="h-4 w-4" />
         طباعة

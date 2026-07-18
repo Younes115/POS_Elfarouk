@@ -383,7 +383,12 @@ export function createPosService(prisma: PrismaClient) {
       });
 
       // 4. Create a NEW adjustment Order dated TODAY
-      const refundTotal = -(qtyToReturn * orderItem.priceAtSale);
+      const orderSubtotal = orderItem.order.subTotal;
+      const orderDiscount = orderItem.order.discountValue;
+      const discountRatio = orderSubtotal > 0 ? (orderDiscount / orderSubtotal) : 0;
+      const effectivePrice = Math.round(orderItem.priceAtSale * (1 - discountRatio));
+
+      const refundTotal = -(qtyToReturn * effectivePrice);
       const refundReceipt = `RET-${orderItem.order.receiptNumber}-${Date.now()}`;
 
       const adjustmentOrder = await tx.order.create({
@@ -400,7 +405,7 @@ export function createPosService(prisma: PrismaClient) {
               productId: orderItem.productId,
               quantity: -qtyToReturn,
               costAtSale: orderItem.costAtSale,
-              priceAtSale: orderItem.priceAtSale,
+              priceAtSale: effectivePrice,
               returnedQuantity: 0,
             },
           },
@@ -499,11 +504,16 @@ export function createPosService(prisma: PrismaClient) {
 
       // 5. Create a NEW adjustment Order dated TODAY
       //    total = (value of new items) − (value of returned items)
-      const returnedValue = qtyToExchange * oldItem.priceAtSale;
+      const orderSubtotal = oldItem.order.subTotal;
+      const orderDiscount = oldItem.order.discountValue;
+      const discountRatio = orderSubtotal > 0 ? (orderDiscount / orderSubtotal) : 0;
+      const effectiveOldPrice = Math.round(oldItem.priceAtSale * (1 - discountRatio));
+
+      const returnedValue = qtyToExchange * effectiveOldPrice;
       const newValue = qtyToExchange * newProduct.sellingPrice;
       const netDifference = newValue - returnedValue;
 
-      const exchangeReceipt = `EXC-${oldItem.order.receiptNumber}-${Date.now()}`;
+      const exchangeReceipt = `EX-${Math.floor(100000 + Math.random() * 900000)}`;
       const orderType = netDifference >= 0 ? 'SALE' : 'RETURN';
 
       const adjustmentOrder = await tx.order.create({
@@ -522,7 +532,7 @@ export function createPosService(prisma: PrismaClient) {
                 productId: oldItem.productId,
                 quantity: -qtyToExchange,
                 costAtSale: oldItem.costAtSale,
-                priceAtSale: oldItem.priceAtSale,
+                priceAtSale: effectiveOldPrice,
                 returnedQuantity: 0,
               },
               // Positive line: the new product

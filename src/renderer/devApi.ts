@@ -262,7 +262,31 @@ const mockApi: PosApi = {
         item.returnedQuantity += qtyToReturn;
         const product = mockProducts.find((p) => p.id === item.productId);
         if (product) product.stock += qtyToReturn;
-        return { success: true, data: { ...item } };
+        // Create adjustment order (mirrors real backend shape)
+        const refundTotal = -(qtyToReturn * item.priceAtSale);
+        const adjustmentOrder = {
+          id: nextId(),
+          receiptNumber: `RET-${order.receiptNumber}-${Date.now()}`,
+          subTotal: refundTotal,
+          discountValue: 0,
+          offerName: null,
+          total: refundTotal,
+          type: 'RETURN',
+          createdAt: new Date().toISOString(),
+          items: [
+            {
+              id: nextId(),
+              orderId: order.id,
+              productId: item.productId,
+              quantity: -qtyToReturn,
+              costAtSale: item.costAtSale,
+              priceAtSale: item.priceAtSale,
+              returnedQuantity: 0,
+            },
+          ],
+        };
+        mockOrders.push(adjustmentOrder);
+        return { success: true, data: adjustmentOrder };
       }
     }
     return { success: false, error: 'Order item not found' };
@@ -291,19 +315,41 @@ const mockApi: PosApi = {
         if (oldProduct) oldProduct.stock += qtyToExchange;
         // Decrement new product stock
         newProduct.stock -= qtyToExchange;
-        // Create new order item
-        const newItem = {
+        // Create new exchange adjustment order (mirrors real backend shape)
+        const exchangeReceiptNumber = `EX-${Math.floor(100000 + Math.random() * 900000)}`;
+        const netDifference = (qtyToExchange * newProduct.sellingPrice) - (qtyToExchange * oldItem.priceAtSale);
+        const adjustmentOrder = {
           id: nextId(),
-          orderId: order.id,
-          productId: newProduct.id,
-          quantity: qtyToExchange,
-          costAtSale: newProduct.costPrice,
-          priceAtSale: newProduct.sellingPrice,
-          returnedQuantity: 0,
-          product: { ...newProduct },
+          receiptNumber: exchangeReceiptNumber,
+          subTotal: netDifference,
+          discountValue: 0,
+          offerName: null,
+          total: netDifference,
+          type: netDifference >= 0 ? 'SALE' : 'RETURN',
+          createdAt: new Date().toISOString(),
+          items: [
+            {
+              id: nextId(),
+              orderId: order.id,
+              productId: oldItem.productId,
+              quantity: -qtyToExchange,
+              costAtSale: oldItem.costAtSale,
+              priceAtSale: oldItem.priceAtSale,
+              returnedQuantity: 0,
+            },
+            {
+              id: nextId(),
+              orderId: order.id,
+              productId: newProduct.id,
+              quantity: qtyToExchange,
+              costAtSale: newProduct.costPrice,
+              priceAtSale: newProduct.sellingPrice,
+              returnedQuantity: 0,
+            },
+          ],
         };
-        order.items.push(newItem);
-        return { success: true, data: newItem };
+        mockOrders.push(adjustmentOrder);
+        return { success: true, data: adjustmentOrder };
       }
     }
     return { success: false, error: 'Order item not found' };
@@ -377,6 +423,14 @@ const mockApi: PosApi = {
         topSellingProducts: [],
       },
     };
+  },
+
+  printSilent: async () => {
+    console.log('[DEV] Mock silent print triggered');
+    if (typeof window !== 'undefined' && window.print) {
+      window.print();
+    }
+    return { success: true, data: true };
   },
 };
 

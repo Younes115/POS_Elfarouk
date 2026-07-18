@@ -36,6 +36,7 @@ export const IPC_CHANNELS = {
   GET_DAILY_SUMMARY: 'pos:get-daily-summary',
   GET_DAILY_REPORT: 'pos:get-daily-report',
   GET_MONTHLY_REPORT: 'pos:get-monthly-report',
+  PRINT_SILENT: 'pos:print-silent',
 } as const;
 
 // ── Response Envelope ────────────────────────
@@ -283,4 +284,24 @@ export function registerIpcHandlers(service: PosService): void {
       }
     },
   );
+
+  // ── Print ──────────────────────────────────
+
+  ipcMain.handle(IPC_CHANNELS.PRINT_SILENT, async (event) => {
+    try {
+      console.log('[IPC] PRINT_SILENT triggered on backend!');
+      // Await the print command. If we don't await it, the IPC resolves instantly,
+      // the frontend destroys the Receipt DOM, and the print job fails because the DOM is gone.
+      await event.sender.print({
+        silent: true, // Switched to true to ensure direct, dialog-free printing
+        printBackground: true,
+        color: false,
+        margins: { marginType: 'printableArea' }
+      });
+      
+      return ok(true);
+    } catch (err) {
+      return fail(err);
+    }
+  });
 }

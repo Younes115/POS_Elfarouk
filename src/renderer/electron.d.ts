@@ -44,14 +44,15 @@ export interface PosApi {
     items: CreateOrderItemInput[],
   ) => Promise<IpcResponse<OrderRecord>>;
   getOrderByReceipt: (receiptNumber: string) => Promise<IpcResponse<OrderWithItemsRecord | null>>;
-  refundItem: (orderItemId: string, qtyToReturn: number) => Promise<IpcResponse<OrderItemRecord>>;
-  exchangeItem: (orderItemId: string, qtyToExchange: number, newProductSku: string) => Promise<IpcResponse<OrderItemRecord>>;
+  refundItem: (orderItemId: string, qtyToReturn: number) => Promise<IpcResponse<OrderRecord>>;
+  exchangeItem: (orderItemId: string, qtyToExchange: number, newProductSku: string) => Promise<IpcResponse<OrderRecord>>;
   createExpense: (amount: number, category: string, description: string) => Promise<IpcResponse<ExpenseRecord>>;
   getDailyExpenses: (dateStr: string) => Promise<IpcResponse<ExpenseRecord[]>>;
   deleteExpense: (id: string) => Promise<IpcResponse<ExpenseRecord>>;
   getDailySummary: (dateStr: string) => Promise<IpcResponse<DailySummary>>;
   getDailyReport: (dateStr: string) => Promise<IpcResponse<DailyReport>>;
   getMonthlyReport: (year: number, month: number) => Promise<IpcResponse<MonthlyReport>>;
+  printSilent: () => Promise<IpcResponse<boolean>>;
 }
 
 declare global {

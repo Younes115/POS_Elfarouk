@@ -16,7 +16,7 @@ export interface ReceiptTicketProps {
 const ReceiptTicket = React.forwardRef<HTMLDivElement, ReceiptTicketProps>(
   (
     {
-      storeName = 'الفاروق',
+      storeName = 'كوتشى الفاروق',
       receiptNumber,
       items,
       subTotal,

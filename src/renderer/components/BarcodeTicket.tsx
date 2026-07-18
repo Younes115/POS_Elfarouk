@@ -6,9 +6,10 @@ export interface BarcodeTicketProps {
   sku: string;
   name: string;
   price: string;
+  onPrintComplete?: () => void;
 }
 
-export default function BarcodeTicket({ sku, name, price }: BarcodeTicketProps) {
+export default function BarcodeTicket({ sku, name, price, onPrintComplete }: BarcodeTicketProps) {
   return (
     <div className="flex flex-col items-center gap-4">
       {/* ── Printable Label ── */}
@@ -52,7 +53,10 @@ export default function BarcodeTicket({ sku, name, price }: BarcodeTicketProps) 
       <Button
         id="btn-print-barcode"
         className="no-print gap-2 px-6 h-10 font-bold"
-        onClick={() => window.print()}
+        onClick={() => {
+          window.print();
+          if (onPrintComplete) onPrintComplete();
+        }}
       >
         <Printer className="h-4 w-4" />
         طباعة
