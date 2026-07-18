@@ -119,7 +119,8 @@ export function createPosService(prisma: PrismaClient) {
 
   async function getProductBySku(sku: string): Promise<ProductRecord | null> {
     const product = await prisma.product.findUnique({ where: { sku } });
-    if (!product) return null;
+    // Hide archived products from inventory/cashier lookups
+    if (!product || product.isArchived) return null;
 
     return {
       ...product,
@@ -128,8 +129,17 @@ export function createPosService(prisma: PrismaClient) {
     };
   }
 
-  async function deleteProduct(id: string) {
-    return prisma.product.delete({ where: { id } });
+  /**
+   * Soft-delete: mark the product as archived instead of
+   * physically removing the row. This preserves:
+   *   - Foreign key integrity on OrderItem.productId
+   *   - Historical report accuracy (product name in top sellers, etc.)
+   */
+  async function deleteProduct(id: string): Promise<void> {
+    await prisma.product.update({
+      where: { id },
+      data: { isArchived: true },
+    });
   }
 
   async function updateProduct(
@@ -158,6 +168,7 @@ export function createPosService(prisma: PrismaClient) {
 
   async function getAllProducts(): Promise<ProductRecord[]> {
     const products = await prisma.product.findMany({
+      where: { isArchived: false },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -171,6 +182,7 @@ export function createPosService(prisma: PrismaClient) {
   async function searchProducts(query: string): Promise<ProductRecord[]> {
     const products = await prisma.product.findMany({
       where: {
+        isArchived: false,
         OR: [
           { sku: { contains: query } },
           { name: { contains: query } },

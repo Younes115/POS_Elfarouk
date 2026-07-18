@@ -47,7 +47,9 @@ export function setupTestEnvironment(dbName: string) {
     // Call in afterAll
     cleanup: async () => {
       await prisma.$disconnect();
-      // Optionally delete the test.db file if we want
+      if (fs.existsSync(testDbPath)) {
+        fs.unlinkSync(testDbPath);
+      }
     }
   };
 }

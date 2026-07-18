@@ -467,6 +467,7 @@ export default function Inventory() {
                 sku={printProduct.sku}
                 name={printProduct.name}
                 price={printProduct.price}
+                onPrintComplete={() => setPrintProduct(null)}
               />
             )}
           </div>

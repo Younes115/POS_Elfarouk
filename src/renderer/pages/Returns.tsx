@@ -890,7 +890,13 @@ export default function Returns() {
           <div className="px-4 py-2">
             <div className="border border-gray-200 rounded-lg shadow-inner bg-gray-50 p-2 flex justify-center">
               {exchangeReceiptData && (
-                <ExchangeReceiptTicket {...exchangeReceiptData} />
+                <ExchangeReceiptTicket 
+                  {...exchangeReceiptData} 
+                  onPrintComplete={() => {
+                    setShowExchangeReceipt(false);
+                    setExchangeReceiptData(null);
+                  }}
+                />
               )}
             </div>
           </div>

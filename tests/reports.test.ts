@@ -496,6 +496,22 @@ describe('getMonthlyReport', () => {
       ],
     });
 
+    // Order 4: The actual RETURN order for Product C × -10
+    await seedOrderAtTime({
+      receiptNumber: 'RPT-TOP-ORD-4',
+      total: -2500, // -10 × 250
+      createdAt: testDate,
+      type: 'RETURN',
+      items: [
+        {
+          productId: productC.id,
+          quantity: -10,
+          costAtSale: 90,
+          priceAtSale: 250,
+        },
+      ],
+    });
+
     // ACT
     const report = await service.getMonthlyReport(2026, 7);
 
@@ -657,11 +673,12 @@ describe('getMonthlyReport', () => {
     expect(report.monthlyNetRevenue).toBe(150);
     // Gross COGS = 2 × 50 = 100 (only from positive order)
     expect(report.monthlyGrossCOGS).toBe(100);
-    expect(report.monthlyRefundedCOGS).toBe(0);  // returnedQuantity is 0 on the sale order
-    expect(report.monthlyNetCOGS).toBe(100);
+    // Refunded COGS = 1 × 50 = 50 (from negative RETURN order)
+    expect(report.monthlyRefundedCOGS).toBe(50);
+    expect(report.monthlyNetCOGS).toBe(50);
     expect(report.monthlyExpenses).toBe(30);
-    // Net Profit = 150 - 100 - 30 = 20
-    expect(report.monthlyNetProfit).toBe(20);
+    // Net Profit = 150 - 50 - 30 = 70
+    expect(report.monthlyNetProfit).toBe(70);
 
     // Verify daily trend reflects the refund on day 20
     const day5 = report.dailySalesTrend.find((d) => d.day === 5)!;
