@@ -158,6 +158,7 @@ export default function Returns() {
   const [isExchanging, setIsExchanging] = useState(false);
   const [exchangeReceiptData, setExchangeReceiptData] = useState<ExchangeReceiptTicketProps | null>(null);
   const [showExchangeReceipt, setShowExchangeReceipt] = useState(false);
+  const [customPrice, setCustomPrice] = useState<number | ''>('');
 
   // ── Toast state ─────────────────────────────
   const [toast, setToast] = useState<ToastData | null>(null);
@@ -257,6 +258,7 @@ export default function Returns() {
     setExchangeSku('');
     setExchangeProduct(null);
     setExchangeSkuError(null);
+    setCustomPrice('');
   }
 
   // ── Exchange: SKU lookup ────────────────────
@@ -292,7 +294,8 @@ export default function Returns() {
 
     setIsExchanging(true);
     try {
-      const result = await window.api.exchangeItem(exchangeItem.id, exchangeQty, exchangeProduct.sku);
+      const actualCustomPrice = customPrice !== '' ? customPrice : undefined;
+      const result = await window.api.exchangeItem(exchangeItem.id, exchangeQty, exchangeProduct.sku, actualCustomPrice);
       if (!result.success) {
         showToast(`Exchange failed: ${result.error}`, 'error');
       } else {
@@ -300,8 +303,11 @@ export default function Returns() {
         
         // Prepare receipt data — use the NEW exchange receipt number from the backend
         const diff = getPriceDifference();
+        const actualNewPrice = customPrice !== '' ? customPrice : exchangeProduct.sellingPrice;
+        
         setExchangeReceiptData({
           receiptNumber: result.data.receiptNumber,
+          invoiceNumber: result.data.invoiceNumber,
           originalReceiptNumber: order?.receiptNumber || 'N/A',
           date: new Date().toLocaleString('en-EG', {
             year: 'numeric', month: '2-digit', day: '2-digit',
@@ -319,7 +325,8 @@ export default function Returns() {
             size: exchangeProduct.size,
             color: exchangeProduct.color,
             quantity: exchangeQty,
-            price: exchangeProduct.sellingPrice,
+            price: actualNewPrice,
+            originalPrice: exchangeProduct.sellingPrice,
           },
           netDifference: diff * exchangeQty,
         });
@@ -341,6 +348,7 @@ export default function Returns() {
     setExchangeSku('');
     setExchangeProduct(null);
     setExchangeSkuError(null);
+    setCustomPrice('');
   }
 
   // ── Price difference calculation ────────────
@@ -349,7 +357,8 @@ export default function Returns() {
     if (!exchangeItem || !exchangeProduct || !order) return 0;
     const discountRatio = order.subTotal > 0 ? (order.discountValue / order.subTotal) : 0;
     const effectiveOldPrice = Math.round(exchangeItem.priceAtSale * (1 - discountRatio));
-    return exchangeProduct.sellingPrice - effectiveOldPrice;
+    const actualNewPrice = customPrice !== '' ? customPrice : exchangeProduct.sellingPrice;
+    return actualNewPrice - effectiveOldPrice;
   }
 
   // ── Render ─────────────────────────────────
@@ -820,14 +829,35 @@ export default function Returns() {
                         {' · '}Stock: {exchangeProduct.stock}
                       </p>
                       <p className="text-sm font-semibold mt-1">
-                        {formatPrice(exchangeProduct.sellingPrice)} each
+                        Original Price: {formatPrice(exchangeProduct.sellingPrice)}
                       </p>
+
+                      <div className="mt-3 pt-3 border-t border-emerald-500/10">
+                        <label className="text-sm font-medium block mb-1.5">
+                          Custom Price Override (Optional)
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm font-medium">EGP</span>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            className="pl-12 font-mono bg-background"
+                            placeholder={exchangeProduct.sellingPrice.toString()}
+                            value={customPrice}
+                            onChange={(e) => setCustomPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     {/* Price difference */}
                     {(() => {
                       const diff = getPriceDifference();
                       const totalDiff = diff * exchangeQty;
+                      const actualNewPrice = customPrice !== '' ? customPrice : exchangeProduct.sellingPrice;
+                      const effectiveOldPrice = Math.round(exchangeItem.priceAtSale * (1 - (order?.subTotal ? order.discountValue / order.subTotal : 0)));
+                      
                       if (totalDiff === 0) {
                         return (
                           <div className="rounded-lg border bg-muted/30 p-3 text-center">
@@ -851,7 +881,7 @@ export default function Returns() {
                                 {totalDiff > 0 ? 'Amount to Collect' : 'Amount to Refund'}
                               </p>
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                ({formatPrice(exchangeProduct.sellingPrice)} − {formatPrice(Math.round(exchangeItem.priceAtSale * (1 - (order?.subTotal ? order.discountValue / order.subTotal : 0))))})
+                                ({formatPrice(actualNewPrice)} − {formatPrice(effectiveOldPrice)})
                                 {exchangeQty > 1 && ` × ${exchangeQty}`}
                               </p>
                             </div>
@@ -927,8 +957,9 @@ export default function Returns() {
           <div className="px-4 py-2">
             <div className="border border-gray-200 rounded-lg shadow-inner bg-gray-50 p-2 flex justify-center">
               {exchangeReceiptData && (
-                <ExchangeReceiptTicket 
-                  {...exchangeReceiptData} 
+                <ExchangeReceiptTicket
+                  {...exchangeReceiptData}
+                  invoiceNumber={exchangeReceiptData.invoiceNumber}
                   onPrintComplete={() => {
                     setShowExchangeReceipt(false);
                     setExchangeReceiptData(null);

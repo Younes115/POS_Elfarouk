@@ -292,7 +292,7 @@ const mockApi: PosApi = {
     return { success: false, error: 'Order item not found' };
   },
 
-  exchangeItem: async (orderItemId, qtyToExchange, newProductSku) => {
+  exchangeItem: async (orderItemId, qtyToExchange, newProductSku, customPrice?) => {
     for (const order of mockOrders) {
       const oldItem = order.items.find((i) => i.id === orderItemId);
       if (oldItem) {
@@ -315,9 +315,11 @@ const mockApi: PosApi = {
         if (oldProduct) oldProduct.stock += qtyToExchange;
         // Decrement new product stock
         newProduct.stock -= qtyToExchange;
+        
+        const actualNewPrice = customPrice !== undefined && customPrice !== null ? customPrice : newProduct.sellingPrice;
         // Create new exchange adjustment order (mirrors real backend shape)
         const exchangeReceiptNumber = `EX-${Math.floor(100000 + Math.random() * 900000)}`;
-        const netDifference = (qtyToExchange * newProduct.sellingPrice) - (qtyToExchange * oldItem.priceAtSale);
+        const netDifference = (qtyToExchange * actualNewPrice) - (qtyToExchange * oldItem.priceAtSale);
         const adjustmentOrder = {
           id: nextId(),
           receiptNumber: exchangeReceiptNumber,
@@ -343,7 +345,7 @@ const mockApi: PosApi = {
               productId: newProduct.id,
               quantity: qtyToExchange,
               costAtSale: newProduct.costPrice,
-              priceAtSale: newProduct.sellingPrice,
+              priceAtSale: actualNewPrice,
               returnedQuantity: 0,
             },
           ],

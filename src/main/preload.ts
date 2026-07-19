@@ -62,8 +62,8 @@ contextBridge.exposeInMainWorld('api', {
   refundItem: (orderItemId: string, qtyToReturn: number) =>
     ipcRenderer.invoke(IPC_CHANNELS.REFUND_ITEM, orderItemId, qtyToReturn),
 
-  exchangeItem: (orderItemId: string, qtyToExchange: number, newProductSku: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.EXCHANGE_ITEM, orderItemId, qtyToExchange, newProductSku),
+  exchangeItem: (orderItemId: string, qtyToExchange: number, newProductSku: string, customPrice?: number) =>
+    ipcRenderer.invoke(IPC_CHANNELS.EXCHANGE_ITEM, orderItemId, qtyToExchange, newProductSku, customPrice),
 
   // ── Expense ──────────────────────────────
   createExpense: (amount: number, category: string, description: string) =>

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 
 export interface ExchangeReceiptTicketProps {
   receiptNumber: string;
+  invoiceNumber: string | null;
   originalReceiptNumber: string;
   date: string;
   oldItem: {
@@ -19,6 +20,7 @@ export interface ExchangeReceiptTicketProps {
     color?: string | null;
     quantity: number;
     price: number;
+    originalPrice?: number;
   };
   netDifference: number;
   onPrintComplete?: () => void;
@@ -26,6 +28,7 @@ export interface ExchangeReceiptTicketProps {
 
 export default function ExchangeReceiptTicket({
   receiptNumber,
+  invoiceNumber,
   originalReceiptNumber,
   date,
   oldItem,
@@ -83,7 +86,7 @@ export default function ExchangeReceiptTicket({
           <div className="flex justify-between">
             <span className="font-bold">رقم فاتورة الاستبدال:</span>
             <span className="font-mono text-[10px]" dir="ltr">
-              {receiptNumber}
+              {invoiceNumber || receiptNumber}
             </span>
           </div>
           <div className="flex justify-between">
@@ -155,7 +158,15 @@ export default function ExchangeReceiptTicket({
               <tr>
                 <td className="flex justify-between text-[10px]">
                   <span>الكمية: ×{newItem.quantity}</span>
-                  <span>السعر: {fmt(newItem.price)} ج.م</span>
+                  <span>
+                    السعر:{' '}
+                    {newItem.originalPrice !== undefined && newItem.originalPrice > newItem.price ? (
+                      <>
+                        <del className="text-gray-500 ml-1">{fmt(newItem.originalPrice)}</del>{' '}
+                      </>
+                    ) : null}
+                    {fmt(newItem.price)} ج.م
+                  </span>
                 </td>
               </tr>
             </tbody>
@@ -195,7 +206,7 @@ export default function ExchangeReceiptTicket({
         {/* ── Barcode ── */}
         <div className="flex justify-center my-2" dir="ltr">
           <Barcode
-            value={receiptNumber}
+            value={invoiceNumber || receiptNumber}
             width={1.2}
             height={40}
             fontSize={10}
@@ -217,7 +228,13 @@ export default function ExchangeReceiptTicket({
           >
             شكراً لزيارتكم
           </p>
-          <p className="text-[9px] text-gray-400">
+          <p className="flex justify-between items-baseline font text-sm">
+           <span> العنوان: بنى سويف الجديدة شارع 6 امام مكتبة هشام وعمر</span>
+          </p>
+          <p className="text-[13px] text-gray-600">
+            <span>tel:01559499983</span>
+          </p>
+          <p className="text-[13px] text-gray-600">
             لا يتم قبول المرتجعات بدون الإيصال
           </p>
         </div>

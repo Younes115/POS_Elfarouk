@@ -5,6 +5,7 @@ import type { CartItem } from '@/store/useCartStore';
 export interface ReceiptTicketProps {
   storeName?: string;
   receiptNumber: string;
+  invoiceNumber: string | null;
   items: CartItem[];
   subTotal: number;
   discount: number;
@@ -18,6 +19,7 @@ const ReceiptTicket = React.forwardRef<HTMLDivElement, ReceiptTicketProps>(
     {
       storeName = 'كوتشى الفاروق',
       receiptNumber,
+      invoiceNumber,
       items,
       subTotal,
       discount,
@@ -52,7 +54,7 @@ const ReceiptTicket = React.forwardRef<HTMLDivElement, ReceiptTicketProps>(
           >
             {storeName}
           </h1>
-          <p className="text-[10px] text-gray-500 mt-0.5">EL FAROUK — POS</p>
+          <p className="text-[11px] text-gray-500 mt-0.5">EL FAROUK — POS</p>
         </div>
 
         {/* ── Dashed Separator ── */}
@@ -63,7 +65,7 @@ const ReceiptTicket = React.forwardRef<HTMLDivElement, ReceiptTicketProps>(
           <div className="flex justify-between">
             <span className="font-bold">رقم الإيصال:</span>
             <span className="font-mono text-[10px] ltr" dir="ltr">
-              {receiptNumber}
+              {invoiceNumber || receiptNumber}
             </span>
           </div>
           <div className="flex justify-between">
@@ -151,7 +153,7 @@ const ReceiptTicket = React.forwardRef<HTMLDivElement, ReceiptTicketProps>(
         {/* ── Barcode ── */}
         <div className="flex justify-center my-2" dir="ltr">
           <Barcode
-            value={receiptNumber}
+            value={invoiceNumber || receiptNumber}
             width={1.2}
             height={40}
             fontSize={10}
@@ -173,7 +175,13 @@ const ReceiptTicket = React.forwardRef<HTMLDivElement, ReceiptTicketProps>(
           >
             {footerMessage}
           </p>
-          <p className="text-[9px] text-gray-400">
+          <p className="flex justify-between items-baseline font text-sm">
+           <span> العنوان: بنى سويف الجديدة شارع 6 امام مكتبة هشام وعمر</span>
+          </p>
+          <p className="text-[13px] text-gray-600">
+            <span>tel:01559499983</span>
+          </p>
+          <p className="text-[13px] text-gray-600">
             لا يتم قبول المرتجعات بدون الإيصال
           </p>
         </div>

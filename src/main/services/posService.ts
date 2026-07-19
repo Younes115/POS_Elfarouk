@@ -80,6 +80,39 @@ function toExpenseRecord(
 // ── Service Factory ──────────────────────────
 
 export function createPosService(prisma: PrismaClient) {
+  async function generateInvoiceNumber(tx: any, date: Date): Promise<string> {
+    const yy = String(date.getFullYear()).slice(-2);
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const datePrefix = `${yy}${mm}${dd}`;
+
+    const yyyy = date.getFullYear();
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const { start, end } = dayBounds(dateStr);
+
+    const lastOrder = await tx.order.findFirst({
+      where: {
+        createdAt: { gte: start, lte: end },
+        invoiceNumber: { not: null },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { invoiceNumber: true },
+    });
+
+    let sequence = 1;
+    if (lastOrder && lastOrder.invoiceNumber) {
+      const parts = lastOrder.invoiceNumber.split('-');
+      if (parts.length === 2) {
+        const lastSequence = parseInt(parts[1], 10);
+        if (!isNaN(lastSequence)) {
+          sequence = lastSequence + 1;
+        }
+      }
+    }
+
+    return `${datePrefix}-${String(sequence).padStart(3, '0')}`;
+  }
+
   // ── Product ────────────────────────────────
 
   async function addProduct(data: AddProductInput): Promise<ProductRecord> {
@@ -225,10 +258,13 @@ export function createPosService(prisma: PrismaClient) {
       : Math.max(0, orderData.subTotal - (orderData.discountValue ?? 0));
 
     return prisma.$transaction(async (tx) => {
+      const invoiceNumber = await generateInvoiceNumber(tx, new Date());
+
       // 1. Create the Order header.
       const order = await tx.order.create({
         data: {
           receiptNumber: orderData.receiptNumber,
+          invoiceNumber,
           subTotal: orderData.subTotal,
           discountValue: orderData.discountValue ?? 0,
           offerName: orderData.offerName ?? null,
@@ -299,10 +335,16 @@ export function createPosService(prisma: PrismaClient) {
    * including all order items with nested product data.
    */
   async function getOrderByReceipt(
-    receiptNumber: string,
+    searchTerm: string,
   ): Promise<OrderWithItemsRecord | null> {
-    const order = await prisma.order.findUnique({
-      where: { receiptNumber },
+    const order = await prisma.order.findFirst({
+      where: {
+        OR: [
+          { invoiceNumber: searchTerm },
+          { id: searchTerm },
+          { receiptNumber: searchTerm },
+        ],
+      },
       include: {
         items: {
           include: { product: true },
@@ -314,6 +356,7 @@ export function createPosService(prisma: PrismaClient) {
 
     return {
       ...order,
+      invoiceNumber: order.invoiceNumber,
       createdAt: serialiseDate(order.createdAt),
       items: order.items.map((item) => ({
         ...item,
@@ -390,10 +433,12 @@ export function createPosService(prisma: PrismaClient) {
 
       const refundTotal = -(qtyToReturn * effectivePrice);
       const refundReceipt = `RET-${orderItem.order.receiptNumber}-${Date.now()}`;
+      const invoiceNumber = await generateInvoiceNumber(tx, new Date());
 
       const adjustmentOrder = await tx.order.create({
         data: {
           receiptNumber: refundReceipt,
+          invoiceNumber,
           subTotal: refundTotal,
           discountValue: 0,
           offerName: null,
@@ -443,6 +488,7 @@ export function createPosService(prisma: PrismaClient) {
     orderItemId: string,
     qtyToExchange: number,
     newProductSku: string,
+    customPrice?: number,
   ): Promise<OrderRecord> {
     return prisma.$transaction(async (tx) => {
       // 1. Fetch old order item + its parent order
@@ -459,44 +505,41 @@ export function createPosService(prisma: PrismaClient) {
         throw new Error('Quantity to exchange must be greater than 0.');
       }
 
-      if (oldItem.returnedQuantity + qtyToExchange > oldItem.quantity) {
+      // 2. Validate quantity to exchange
+      const remainingQty = oldItem.quantity - oldItem.returnedQuantity;
+      if (qtyToExchange > remainingQty) {
         throw new Error(
-          `Cannot exchange ${qtyToExchange} — only ${oldItem.quantity - oldItem.returnedQuantity} remaining.`,
+          `Cannot exchange ${qtyToExchange}. Only ${remainingQty} remaining.`,
         );
       }
 
-      if (!oldItem.productId) {
-        throw new Error('Cannot exchange: original product has been deleted.');
-      }
-
-      // 2. Fetch new product by SKU
+      // 3. Find the NEW product
       const newProduct = await tx.product.findUnique({
         where: { sku: newProductSku },
       });
 
       if (!newProduct) {
-        throw new Error(`New product not found with SKU: ${newProductSku}`);
+        throw new Error(`Product not found with SKU: ${newProductSku}`);
       }
 
+      // Enforce oversell protection: cannot exchange if new item lacks stock.
       if (newProduct.stock < qtyToExchange) {
-        throw new Error(
-          `Insufficient stock for "${newProduct.name}": ` +
-          `need ${qtyToExchange}, available ${newProduct.stock}`,
-        );
+        throw new Error(`Insufficient stock for "${newProduct.name}"`);
       }
 
-      // 3. Increment returnedQuantity on old item and restore old stock
+      // 4. Update OLD item + restore old product stock, deduct new product stock
       await tx.orderItem.update({
-        where: { id: orderItemId },
+        where: { id: oldItem.id },
         data: { returnedQuantity: { increment: qtyToExchange } },
       });
 
-      await tx.product.update({
-        where: { id: oldItem.productId },
-        data: { stock: { increment: qtyToExchange } },
-      });
+      if (oldItem.product) {
+        await tx.product.update({
+          where: { id: oldItem.productId! },
+          data: { stock: { increment: qtyToExchange } },
+        });
+      }
 
-      // 4. Decrement new product stock
       await tx.product.update({
         where: { id: newProduct.id },
         data: { stock: { decrement: qtyToExchange } },
@@ -510,15 +553,18 @@ export function createPosService(prisma: PrismaClient) {
       const effectiveOldPrice = Math.round(oldItem.priceAtSale * (1 - discountRatio));
 
       const returnedValue = qtyToExchange * effectiveOldPrice;
-      const newValue = qtyToExchange * newProduct.sellingPrice;
+      const actualNewPrice = customPrice !== undefined && customPrice !== null ? customPrice : newProduct.sellingPrice;
+      const newValue = qtyToExchange * actualNewPrice;
       const netDifference = newValue - returnedValue;
 
       const exchangeReceipt = `EX-${Math.floor(100000 + Math.random() * 900000)}`;
       const orderType = netDifference >= 0 ? 'SALE' : 'RETURN';
+      const invoiceNumber = await generateInvoiceNumber(tx, new Date());
 
       const adjustmentOrder = await tx.order.create({
         data: {
           receiptNumber: exchangeReceipt,
+          invoiceNumber,
           subTotal: netDifference,
           discountValue: 0,
           offerName: null,
@@ -529,7 +575,7 @@ export function createPosService(prisma: PrismaClient) {
             create: [
               // Negative line: the returned product
               {
-                productId: oldItem.productId,
+                productId: oldItem.productId!,
                 quantity: -qtyToExchange,
                 costAtSale: oldItem.costAtSale,
                 priceAtSale: effectiveOldPrice,
@@ -540,7 +586,7 @@ export function createPosService(prisma: PrismaClient) {
                 productId: newProduct.id,
                 quantity: qtyToExchange,
                 costAtSale: newProduct.costPrice,
-                priceAtSale: newProduct.sellingPrice,
+                priceAtSale: actualNewPrice,
                 returnedQuantity: 0,
               },
             ],

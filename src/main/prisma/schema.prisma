@@ -39,6 +39,7 @@ model Product {
 model Order {
   id            String      @id @default(uuid())
   receiptNumber String      @unique
+  invoiceNumber String?     @unique
   subTotal      Float
   // discountValue: fixed monetary amount, never a percentage.
   // The human-readable reason is stored in offerName.

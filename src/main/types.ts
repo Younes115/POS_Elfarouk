@@ -52,6 +52,7 @@ export interface CreateOrderInput {
 export interface OrderRecord {
   id: string;
   receiptNumber: string;
+  invoiceNumber: string | null;
   subTotal: number;
   discountValue: number;
   offerName: string | null;
@@ -76,6 +77,7 @@ export interface OrderItemRecord {
 export interface OrderWithItemsRecord {
   id: string;
   receiptNumber: string;
+  invoiceNumber: string | null;
   subTotal: number;
   discountValue: number;
   offerName: string | null;

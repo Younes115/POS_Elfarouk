@@ -25,6 +25,7 @@ import type { ProductRecord } from '../../main/types';
 // ── Receipt snapshot type (frozen at checkout time) ──
 interface ReceiptSnapshot {
   receiptNumber: string;
+  invoiceNumber: string | null;
   items: CartItem[];
   subTotal: number;
   discount: number;
@@ -239,7 +240,7 @@ export default function Cashier() {
       type: 'SALE' as const,
     };
 
-    // ── STEP 1: Save to database (blocking) ──
+    let createdInvoiceNumber: string | null = null;
     try {
       const result = await window.api.createOrder(orderData, orderItems);
 
@@ -248,6 +249,7 @@ export default function Cashier() {
         setIsCheckingOut(false);
         return; // DO NOT clear cart — let the cashier retry
       }
+      createdInvoiceNumber = result.data?.invoiceNumber ?? null;
     } catch (err) {
       setScanError(
         `Checkout error: ${err instanceof Error ? err.message : 'Unknown error'}`,
@@ -259,6 +261,7 @@ export default function Cashier() {
     // ── STEP 2: Snapshot cart for receipt BEFORE clearing ──
     const snapshot: ReceiptSnapshot = {
       receiptNumber,
+      invoiceNumber: createdInvoiceNumber,
       items: cart.map((item) => ({ ...item, product: { ...item.product } })),
       subTotal,
       discount,
@@ -633,6 +636,7 @@ export default function Cashier() {
               {receiptData && (
                 <ReceiptTicket
                   receiptNumber={receiptData.receiptNumber}
+                  invoiceNumber={receiptData.invoiceNumber}
                   items={receiptData.items}
                   subTotal={receiptData.subTotal}
                   discount={receiptData.discount}

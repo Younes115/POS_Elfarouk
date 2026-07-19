@@ -275,9 +275,9 @@ export function registerIpcHandlers(service: PosService): void {
 
   ipcMain.handle(
     IPC_CHANNELS.EXCHANGE_ITEM,
-    async (_event, orderItemId: string, qtyToExchange: number, newProductSku: string) => {
+    async (_event, orderItemId: string, qtyToExchange: number, newProductSku: string, customPrice?: number) => {
       try {
-        const result = await service.exchangeItem(orderItemId, qtyToExchange, newProductSku);
+        const result = await service.exchangeItem(orderItemId, qtyToExchange, newProductSku, customPrice);
         return ok(result);
       } catch (err) {
         return fail(err);
