@@ -75,23 +75,29 @@
   "build": {
     "appId": "com.elfarouk.pos",
     "productName": "POS Elfarouk",
+    "asar": true,
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "node_modules/@prisma/**/*",
-      "node_modules/.prisma/**/*"
+      "node_modules/@prisma/client/**/*",
+      "node_modules/.prisma/client/index.js",
+      "node_modules/.prisma/client/index.d.ts",
+      "node_modules/.prisma/client/package.json",
+      "node_modules/.prisma/client/default.js",
+      "node_modules/.prisma/client/default.d.ts",
+      "node_modules/.prisma/client/client.js",
+      "node_modules/.prisma/client/client.d.ts",
+      "node_modules/.prisma/client/schema.prisma",
+      "node_modules/.prisma/client/query_engine-windows.dll.node",
+      "!**/*.tmp*"
     ],
     "extraResources": [
       {
-        "from": "src/main/prisma/dev.db",
-        "to": "prisma/dev.db"
-      },
-      {
-        "from": "node_modules/.prisma/client/query_engine*",
-        "to": "prisma/"
+        "from": "src/main/prisma/schema.prisma",
+        "to": "prisma/schema.prisma"
       }
     ],
     "win": {
@@ -101,12 +107,13 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "public/favicon.svg"
+      "icon": "public/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": true,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
     }
   }
 }

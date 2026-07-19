@@ -7,7 +7,7 @@
 
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
-import { getPrismaClient } from './prisma/client.js';
+import { getPrismaClient, ensureDatabase } from './prisma/client.js';
 import { createPosService } from './services/posService.js';
 import { registerIpcHandlers } from './ipcHandlers.js';
 
@@ -51,11 +51,13 @@ app.whenReady().then(async () => {
   // 1. Boot Prisma
   const prisma = getPrismaClient();
 
-  // 2. Ensure the database schema is up-to-date
-  //    (no-op if tables already exist)
+  // 2. Connect and ensure schema exists
+  //    In production, on first launch this creates all tables
+  //    from the embedded DDL. In dev it's a no-op.
   try {
     await prisma.$connect();
     console.log('[Main] Prisma connected successfully');
+    await ensureDatabase(prisma);
   } catch (err) {
     console.error('[Main] Failed to connect to database:', err);
   }
