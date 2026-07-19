@@ -42,6 +42,7 @@ interface MockOrderItem extends OrderItemRecord {
 interface MockOrder {
   id: string;
   receiptNumber: string;
+  invoiceNumber: string | null;
   subTotal: number;
   discountValue: number;
   offerName: string | null;
@@ -168,6 +169,7 @@ const mockApi: PosApi = {
     const order = {
       id: orderId,
       receiptNumber: orderData.receiptNumber ?? `RCP-${Date.now()}`,
+      invoiceNumber: `INV-MOCK-${Date.now()}`,
       subTotal: orderData.subTotal ?? 0,
       discountValue: orderData.discountValue ?? 0,
       offerName: orderData.offerName ?? null,
@@ -267,6 +269,7 @@ const mockApi: PosApi = {
         const adjustmentOrder = {
           id: nextId(),
           receiptNumber: `RET-${order.receiptNumber}-${Date.now()}`,
+          invoiceNumber: `INV-MOCK-${Date.now()}`,
           subTotal: refundTotal,
           discountValue: 0,
           offerName: null,
@@ -323,6 +326,7 @@ const mockApi: PosApi = {
         const adjustmentOrder = {
           id: nextId(),
           receiptNumber: exchangeReceiptNumber,
+          invoiceNumber: `INV-MOCK-${Date.now()}`,
           subTotal: netDifference,
           discountValue: 0,
           offerName: null,
@@ -433,6 +437,16 @@ const mockApi: PosApi = {
       window.print();
     }
     return { success: true, data: true };
+  },
+
+  backupDatabase: async () => {
+    console.log('[DEV] Mock backup triggered — no native dialog in browser mode.');
+    return { success: true, data: 'Mock backup saved to: /dev/mock/POS_Backup.sqlite' };
+  },
+
+  restoreDatabase: async () => {
+    console.log('[DEV] Mock restore triggered — no native dialog in browser mode.');
+    return { success: true, data: 'Mock restore complete. App would restart in Electron.' };
   },
 };
 

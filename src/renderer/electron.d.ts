@@ -53,6 +53,8 @@ export interface PosApi {
   getDailyReport: (dateStr: string) => Promise<IpcResponse<DailyReport>>;
   getMonthlyReport: (year: number, month: number) => Promise<IpcResponse<MonthlyReport>>;
   printSilent: () => Promise<IpcResponse<boolean>>;
+  backupDatabase: () => Promise<IpcResponse<string>>;
+  restoreDatabase: () => Promise<IpcResponse<string>>;
 }
 
 declare global {

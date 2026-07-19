@@ -8,7 +8,10 @@
 // envelope instead of raw exceptions.
 // ─────────────────────────────────────────────
 
-import { ipcMain } from 'electron';
+import { ipcMain, dialog, app, BrowserWindow } from 'electron';
+import path from 'path';
+import fs from 'fs';
+import type { PrismaClient } from '@prisma/client';
 import type { PosService } from './services/posService.js';
 import type {
   AddProductInput,
@@ -37,6 +40,8 @@ export const IPC_CHANNELS = {
   GET_DAILY_REPORT: 'pos:get-daily-report',
   GET_MONTHLY_REPORT: 'pos:get-monthly-report',
   PRINT_SILENT: 'pos:print-silent',
+  BACKUP_DATABASE: 'pos:backup-database',
+  RESTORE_DATABASE: 'pos:restore-database',
 } as const;
 
 // ── Response Envelope ────────────────────────
@@ -64,7 +69,7 @@ function fail(err: unknown): IpcResponse<never> {
 
 // ── Registration ─────────────────────────────
 
-export function registerIpcHandlers(service: PosService): void {
+export function registerIpcHandlers(service: PosService, prisma?: PrismaClient): void {
   // ── Product ──────────────────────────────
 
   ipcMain.handle(
@@ -300,6 +305,123 @@ export function registerIpcHandlers(service: PosService): void {
       });
       
       return ok(true);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  // ── Database Backup ───────────────────────
+
+  ipcMain.handle(IPC_CHANNELS.BACKUP_DATABASE, async () => {
+    try {
+      // ── 1. Resolve the current database path ──
+      const isProd = app.isPackaged;
+      let dbPath: string;
+
+      if (isProd) {
+        dbPath = path.join(app.getPath('userData'), 'database.sqlite');
+      } else {
+        dbPath = path.join(app.getAppPath(), 'src', 'main', 'prisma', 'dev.db');
+      }
+
+      // Ensure the source database actually exists
+      if (!fs.existsSync(dbPath)) {
+        return fail('Database file not found at: ' + dbPath);
+      }
+
+      // ── 2. Build a date-stamped default filename ──
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm   = String(now.getMonth() + 1).padStart(2, '0');
+      const dd   = String(now.getDate()).padStart(2, '0');
+      const defaultName = `POS_Backup_${yyyy}-${mm}-${dd}.sqlite`;
+
+      // ── 3. Show native "Save As" dialog ──
+      const focusedWindow = BrowserWindow.getFocusedWindow();
+      const { canceled, filePath: destPath } = await dialog.showSaveDialog(
+        focusedWindow!,
+        {
+          title: 'Save Database Backup',
+          defaultPath: defaultName,
+          filters: [
+            { name: 'SQLite Database', extensions: ['sqlite', 'db'] },
+            { name: 'All Files',       extensions: ['*'] },
+          ],
+        },
+      );
+
+      if (canceled || !destPath) {
+        return { success: false, error: 'Backup cancelled by user.' };
+      }
+
+      // ── 4. Copy the database file ──
+      fs.copyFileSync(dbPath, destPath);
+
+      return ok(`Backup saved successfully to:\n${destPath}`);
+    } catch (err) {
+      return fail(err);
+    }
+  });
+
+  // ── Database Restore ──────────────────────
+
+  ipcMain.handle(IPC_CHANNELS.RESTORE_DATABASE, async () => {
+    try {
+      // ── 1. Show native "Open" dialog filtered to SQLite files ──
+      const focusedWindow = BrowserWindow.getFocusedWindow();
+      const { canceled, filePaths } = await dialog.showOpenDialog(
+        focusedWindow!,
+        {
+          title: 'Select Database Backup to Restore',
+          properties: ['openFile'],
+          filters: [
+            { name: 'SQLite Database', extensions: ['sqlite', 'db'] },
+            { name: 'All Files',       extensions: ['*'] },
+          ],
+        },
+      );
+
+      if (canceled || filePaths.length === 0) {
+        return { success: false, error: 'Restore cancelled by user.' };
+      }
+
+      const sourcePath = filePaths[0];
+
+      // Verify the selected file actually exists and is readable
+      if (!fs.existsSync(sourcePath)) {
+        return fail('Selected backup file does not exist.');
+      }
+
+      // ── 2. Resolve the current database path ──
+      const isProd = app.isPackaged;
+      let dbPath: string;
+
+      if (isProd) {
+        dbPath = path.join(app.getPath('userData'), 'database.sqlite');
+      } else {
+        dbPath = path.join(app.getAppPath(), 'src', 'main', 'prisma', 'dev.db');
+      }
+
+      // ── 3. Disconnect Prisma to release file lock ──
+      if (prisma) {
+        console.log('[Restore] Disconnecting Prisma client…');
+        await prisma.$disconnect();
+        console.log('[Restore] Prisma disconnected.');
+      }
+
+      // ── 4. Overwrite the active database with the backup ──
+      fs.copyFileSync(sourcePath, dbPath);
+      console.log('[Restore] Database replaced from:', sourcePath);
+
+      // ── 5. Relaunch the application ──
+      //    app.relaunch() schedules a restart, app.exit() terminates
+      //    the current instance immediately so Prisma re-initialises
+      //    cleanly on the fresh launch.
+      app.relaunch();
+      app.exit(0);
+
+      // This line is unreachable but satisfies the return type
+      return ok('Database restored. Application is restarting…');
     } catch (err) {
       return fail(err);
     }

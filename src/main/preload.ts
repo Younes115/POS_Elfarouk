@@ -26,6 +26,8 @@ const IPC_CHANNELS = {
   GET_DAILY_REPORT: 'pos:get-daily-report',
   GET_MONTHLY_REPORT: 'pos:get-monthly-report',
   PRINT_SILENT: 'pos:print-silent',
+  BACKUP_DATABASE: 'pos:backup-database',
+  RESTORE_DATABASE: 'pos:restore-database',
 } as const;
 
 contextBridge.exposeInMainWorld('api', {
@@ -89,4 +91,12 @@ contextBridge.exposeInMainWorld('api', {
   // ── Print ────────────────────────────────
   printSilent: () =>
     ipcRenderer.invoke(IPC_CHANNELS.PRINT_SILENT),
+
+  // ── Database Backup ─────────────────────
+  backupDatabase: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.BACKUP_DATABASE),
+
+  // ── Database Restore ────────────────────
+  restoreDatabase: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.RESTORE_DATABASE),
 });

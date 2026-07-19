@@ -63,8 +63,8 @@ app.whenReady().then(async () => {
   // 3. Create the service layer
   const posService = createPosService(prisma);
 
-  // 4. Register all IPC handlers
-  registerIpcHandlers(posService);
+  // 4. Register all IPC handlers (prisma passed for restore/disconnect)
+  registerIpcHandlers(posService, prisma);
 
   // 5. Open the window
   createWindow();
