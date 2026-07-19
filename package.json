@@ -76,6 +76,10 @@
     "appId": "com.elfarouk.pos",
     "productName": "POS Elfarouk",
     "asar": true,
+    "asarUnpack": [
+      "node_modules/.prisma/client/*.node",
+      "node_modules/@prisma/client/**/*.node"
+    ],
     "directories": {
       "output": "release"
     },
@@ -92,12 +96,18 @@
       "node_modules/.prisma/client/client.d.ts",
       "node_modules/.prisma/client/schema.prisma",
       "node_modules/.prisma/client/query_engine-windows.dll.node",
+      "node_modules/.prisma/client/query_compiler_fast_bg.wasm",
       "!**/*.tmp*"
     ],
     "extraResources": [
       {
         "from": "src/main/prisma/schema.prisma",
         "to": "prisma/schema.prisma"
+      },
+      {
+        "from": "node_modules/.prisma/client/",
+        "to": "prisma/",
+        "filter": ["*.node"]
       }
     ],
     "win": {

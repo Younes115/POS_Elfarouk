@@ -119,6 +119,19 @@ export function getPrismaClient(): PrismaClient {
     // Ensure the userData directory exists (it usually does,
     // but be defensive for first-launch edge cases).
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+    // ── Query Engine Path ────────────────────
+    // The native .node binary is unpacked from the asar and
+    // also copied to extraResources by electron-builder.
+    // Tell Prisma exactly where to find it so it doesn't
+    // search inside the (read-only) asar archive.
+    const enginePath = path.join(
+      process.resourcesPath,
+      'prisma',
+      'query_engine-windows.dll.node',
+    );
+    process.env.PRISMA_QUERY_ENGINE_LIBRARY = enginePath;
+    console.log(`[Prisma] Query engine path: ${enginePath}`);
   } else {
     // ── Development ─────────────────────────
     // Use the dev.db next to the schema in the source tree.
