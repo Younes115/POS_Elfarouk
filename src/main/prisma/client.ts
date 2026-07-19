@@ -74,12 +74,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS "Order_invoiceNumber_key" ON "Order"("invoiceN
  * Executes raw SQL statements against the database using Prisma's
  * $executeRawUnsafe. Splits on semicolons and runs each statement
  * individually (SQLite does not support multi-statement exec).
+ *
+ * Comment lines (starting with --) are stripped from within each
+ * statement, NOT used to discard entire chunks.
  */
 async function execStatements(client: PrismaClient, sql: string): Promise<void> {
   const statements = sql
     .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0 && !s.startsWith('--'));
+    .map((s) =>
+      s
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('--'))
+        .join('\n')
+        .trim(),
+    )
+    .filter((s) => s.length > 0);
 
   for (const stmt of statements) {
     await client.$executeRawUnsafe(stmt + ';');
