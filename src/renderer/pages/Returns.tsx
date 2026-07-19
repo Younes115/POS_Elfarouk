@@ -32,6 +32,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useBarcodeScanner } from '@/hooks/useBarcodeScanner';
 import type { OrderWithItemsRecord, OrderItemRecord, ProductRecord } from '../../main/types';
 
 // ── Helpers ──────────────────────────────────
@@ -177,10 +178,19 @@ export default function Returns() {
     return item.quantity - (item.returnedQuantity ?? 0);
   }
 
+  // ── Global Scanner Hook ────────────────────
+
+  useBarcodeScanner((barcode) => {
+    if (document.activeElement === receiptInputRef.current) {
+      setReceiptInput('');
+    }
+    handleSearch(barcode);
+  });
+
   // ── Search order by receipt ─────────────────
 
-  async function handleSearch() {
-    const receipt = receiptInput.trim();
+  async function handleSearch(scannedReceipt?: string) {
+    const receipt = (scannedReceipt ?? receiptInput).trim();
     if (!receipt) return;
 
     setIsSearching(true);
@@ -404,7 +414,7 @@ export default function Returns() {
           <Button
             id="btn-search-receipt"
             className="h-11 px-6 gap-2"
-            onClick={handleSearch}
+            onClick={() => handleSearch()}
             disabled={isSearching || !receiptInput.trim()}
           >
             {isSearching ? (

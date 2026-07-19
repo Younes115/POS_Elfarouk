@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { useCartStore } from '@/store/useCartStore';
 import type { CartItem } from '@/store/useCartStore';
+import { useBarcodeScanner } from '@/hooks/useBarcodeScanner';
 import ReceiptTicket from '@/components/ReceiptTicket';
 import type { ProductRecord } from '../../main/types';
 
@@ -134,42 +135,9 @@ export default function Cashier() {
     inputRef.current?.focus();
   };
 
-  // ── Keyboard handler (Enter scan + dropdown nav) ──
+  // ── Product Lookup Logic ───────────────────
 
-  const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Arrow navigation in dropdown
-    if (showDropdown && searchResults.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setHighlightedIndex((prev) =>
-          prev < searchResults.length - 1 ? prev + 1 : 0
-        );
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setHighlightedIndex((prev) =>
-          prev > 0 ? prev - 1 : searchResults.length - 1
-        );
-        return;
-      }
-      if (e.key === 'Escape') {
-        setShowDropdown(false);
-        setHighlightedIndex(-1);
-        return;
-      }
-      // Enter with highlighted item → select it
-      if (e.key === 'Enter' && highlightedIndex >= 0) {
-        e.preventDefault();
-        handleSelectProduct(searchResults[highlightedIndex]);
-        return;
-      }
-    }
-
-    // Enter without dropdown selection → exact SKU scan
-    if (e.key !== 'Enter') return;
-
-    const sku = scanInput.trim();
+  const lookupProductBySku = async (sku: string) => {
     if (!sku) return;
 
     // Close dropdown first
@@ -212,6 +180,57 @@ export default function Cashier() {
       setScanInput('');
       inputRef.current?.focus();
     }
+  };
+
+  // ── Global Scanner Hook ────────────────────
+
+  useBarcodeScanner((barcode) => {
+    // If input was focused during scan, we clear the visually typed chars
+    if (document.activeElement === inputRef.current) {
+      setScanInput('');
+    }
+    lookupProductBySku(barcode);
+  });
+
+  // ── Keyboard handler (Enter scan + dropdown nav) ──
+
+  const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Arrow navigation in dropdown
+    if (showDropdown && searchResults.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlightedIndex((prev) =>
+          prev < searchResults.length - 1 ? prev + 1 : 0
+        );
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlightedIndex((prev) =>
+          prev > 0 ? prev - 1 : searchResults.length - 1
+        );
+        return;
+      }
+      if (e.key === 'Escape') {
+        setShowDropdown(false);
+        setHighlightedIndex(-1);
+        return;
+      }
+      // Enter with highlighted item → select it
+      if (e.key === 'Enter' && highlightedIndex >= 0) {
+        e.preventDefault();
+        handleSelectProduct(searchResults[highlightedIndex]);
+        return;
+      }
+    }
+
+    // Enter without dropdown selection → exact SKU scan (Manual)
+    if (e.key !== 'Enter') return;
+
+    const sku = scanInput.trim();
+    if (!sku) return;
+
+    await lookupProductBySku(sku);
   };
 
   // ── Checkout handler (DB-first, modal-second) ──
